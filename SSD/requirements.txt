@@ -7,3 +7,7 @@ pycocotools==2.0.0
 easydict
 omegaconf
 vizer
+click
+cloudpickle
+tensorboard
+tqdm

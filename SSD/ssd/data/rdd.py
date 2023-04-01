@@ -5,26 +5,23 @@ import xml.etree.ElementTree as ET
 from PIL import Image
 from pycocotools.coco import COCO
 from ssd import utils
+import pathlib
 
-class VOCDataset(torch.utils.data.Dataset):
+class RDDDataset(torch.utils.data.Dataset):
     class_names = ('__background__',
-                   'aeroplane', 'bicycle', 'bird', 'boat',
-                   'bottle', 'bus', 'car', 'cat', 'chair',
-                   'cow', 'diningtable', 'dog', 'horse',
-                   'motorbike', 'person', 'pottedplant',
-                   'sheep', 'sofa', 'train', 'tvmonitor')
+                   'd00', 'd10', 'd20', 'd40')
 
-    def __init__(self, data_dir, split, remove_empty, transform=None, keep_difficult=False):
+    def __init__(self, country, split, remove_empty, transform=None, keep_difficult=False):
         """Dataset for VOC data.
         Args:
             data_dir: the root of the VOC2007 or VOC2012 dataset, the directory contains the following sub-directories:
                 Annotations, ImageSets, JPEGImages, SegmentationClass, SegmentationObject.
         """
-        self.data_dir = data_dir
-        self.split = split
         self.transform = transform
-        image_sets_file = os.path.join(self.data_dir, "ImageSets", "Main", "%s.txt" % self.split)
-        self.image_ids = VOCDataset._read_image_ids(image_sets_file)
+        self.data_dir = pathlib.Path(__file__).parent.parent.parent / 'data' / 'rdd2022' / 'RDD2022' / country / split
+        self.image_folder =  self.data_dir / 'images'
+        self.annotation_folder = self.data_dir / 'annotations'
+        self.image_ids = RDDDataset._read_image_ids(self.image_folder)
         self.keep_difficult = keep_difficult
         self.class_dict = {class_name: i for i, class_name in enumerate(self.class_names)}
         if remove_empty:
@@ -45,7 +42,7 @@ class VOCDataset(torch.utils.data.Dataset):
             labels=labels,
             width=im_info["width"],
             height=im_info["height"],
-            image_id=int(image_id)
+            image_id=image_id
         )
         if self.transform:
             sample = self.transform(sample)
@@ -55,15 +52,11 @@ class VOCDataset(torch.utils.data.Dataset):
         return len(self.image_ids)
 
     @staticmethod
-    def _read_image_ids(image_sets_file):
-        ids = []
-        with open(image_sets_file) as f:
-            for line in f:
-                ids.append(line.rstrip())
-        return ids
+    def _read_image_ids(image_folder : pathlib.Path):
+        return [f.stem for f in image_folder.glob('*.jpg')]
 
     def _get_annotation(self, image_id):
-        annotation_file = os.path.join(self.data_dir, "Annotations", "%s.xml" % image_id)
+        annotation_file = self.annotation_folder / 'xmls' / f'{image_id}.xml'
         ann_file = ET.parse(annotation_file)
         objects = ann_file.findall("object")
 
@@ -95,7 +88,7 @@ class VOCDataset(torch.utils.data.Dataset):
 
 
     def _read_image(self, image_id):
-        image_file = os.path.join(self.data_dir, "JPEGImages", f"{image_id}.jpg")
+        image_file = self.image_folder / f'{image_id}.jpg'
         image = Image.open(image_file).convert("RGB")
         image = np.array(image)
         return image
@@ -118,14 +111,14 @@ class VOCDataset(torch.utils.data.Dataset):
             image_id = self.image_ids[idx]
             boxes_ltrb, labels, _, im_info = self._get_annotation(image_id)
             boxes_ltwh = utils.bbox_ltrb_to_ltwh(boxes_ltrb)
-            coco_anns["images"].append({"id": int(image_id), **im_info })
+            coco_anns["images"].append({"id": image_id, **im_info })
             for box, label in zip(boxes_ltwh, labels):
                 box = box.tolist()
                 area = box[-1] * box[-2]
 
                 coco_anns["annotations"].append({
                     "bbox": box, "area": area, "category_id": int(label),
-                    "image_id": int(image_id), "id": ann_id, "iscrowd": 0, "segmentation": []}
+                    "image_id": image_id, "id": ann_id, "iscrowd": 0, "segmentation": []}
                 )
                 ann_id += 1
         coco_anns["annotations"].sort(key=lambda x: x["image_id"])

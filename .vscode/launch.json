@@ -1,0 +1,28 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "VOC",
+            "type": "python",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/SSD",
+            "program": "${workspaceFolder}/SSD/train.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["configs/voc_vgg.py"]
+        },
+        {
+            "name": "RDD2022",
+            "type": "python",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/SSD",
+            "program": "${workspaceFolder}/SSD/train.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["configs/rdd2022.py"]
+        }
+    ]
+}
