@@ -15,6 +15,7 @@ from tops.config import instantiate
 from tops import logger, checkpointer
 from torch.optim.lr_scheduler import ChainedScheduler
 torch.backends.cudnn.benchmark = True
+from alive_progress import alive_bar
 
 def train_epoch(
         model, scaler: torch.cuda.amp.GradScaler,
@@ -22,33 +23,35 @@ def train_epoch(
         gpu_transform: torch.nn.Module,
         log_interval: int):
     grad_scale = scaler.get_scale()
-    for batch in tqdm.tqdm(dataloader_train, f"Epoch {logger.epoch()}"):
-        batch = tops.to_cuda(batch)
-        batch["labels"] = batch["labels"].long()
-        batch = gpu_transform(batch)
+    with alive_bar(len(dataloader_train)) as bar:
+        bar.text = f"Epoch {logger.epoch()}"
+        for batch in dataloader_train:
+            batch = tops.to_cuda(batch)
+            batch["labels"] = batch["labels"].long()
+            batch = gpu_transform(batch)
 
-        with torch.cuda.amp.autocast(enabled=tops.AMP()):
-            bbox_delta, confs = model(batch["image"])
-            loss, to_log = model.loss_func(bbox_delta, confs, batch["boxes"], batch["labels"])
-            # print(to_log)
-        scaler.scale(loss).backward()
-        scaler.step(optim)
-        scaler.update()
-        optim.zero_grad()
-        if grad_scale == scaler.get_scale():
-            scheduler.step()
-            if logger.global_step() % log_interval:
-                logger.add_scalar("stats/learning_rate", scheduler._schedulers[-1].get_last_lr()[-1])
-        else:
-            grad_scale = scaler.get_scale()
-            logger.add_scalar("amp/grad_scale", scaler.get_scale())
-        if logger.global_step() % log_interval == 0:
-            to_log = {f"loss/{k}": v.mean().cpu().item() for k, v in to_log.items()}
-            logger.add_dict(to_log)
-        # torch.cuda.amp skips gradient steps if backward pass produces NaNs/infs.
-        # If it happens in the first iteration, scheduler.step() will throw exception
-        logger.step()
-
+            with torch.cuda.amp.autocast(enabled=tops.AMP()):
+                bbox_delta, confs = model(batch["image"])
+                loss, to_log = model.loss_func(bbox_delta, confs, batch["boxes"], batch["labels"])
+                bar.text = f"Epoch {logger.epoch()}, Loss: {float(loss)}"
+            scaler.scale(loss).backward()
+            scaler.step(optim)
+            scaler.update()
+            optim.zero_grad()
+            if grad_scale == scaler.get_scale():
+                scheduler.step()
+                if logger.global_step() % log_interval:
+                    logger.add_scalar("stats/learning_rate", scheduler._schedulers[-1].get_last_lr()[-1])
+            else:
+                grad_scale = scaler.get_scale()
+                logger.add_scalar("amp/grad_scale", scaler.get_scale())
+            if logger.global_step() % log_interval == 0:
+                to_log = {f"loss/{k}": v.mean().cpu().item() for k, v in to_log.items()}
+                logger.add_dict(to_log)
+            # torch.cuda.amp skips gradient steps if backward pass produces NaNs/infs.
+            # If it happens in the first iteration, scheduler.step() will throw exception
+            logger.step()
+            bar()
     return
 
 
@@ -113,8 +116,8 @@ def train(config_path: Path, evaluate_only: bool):
         eval_stats = {f"metrics/{key}": val for key, val in eval_stats.items()}
         logger.add_dict(eval_stats, level=logger.logger.INFO)
         train_state = dict(total_time=total_time)
-        checkpointer.save_registered_models(train_state, is_best=eval_stats["metrics/mAP@0.5"] > max(map_hist))
-        map_hist.append(eval_stats["metrics/mAP@0.5"])
+        checkpointer.save_registered_models(train_state, is_best=eval_stats.get("metrics/mAP@0.5", 0) > max(map_hist))
+        map_hist.append(eval_stats.get("metrics/mAP@0.5", 0))
         logger.step_epoch()
     logger.add_scalar("stats/total_time", total_time)
 

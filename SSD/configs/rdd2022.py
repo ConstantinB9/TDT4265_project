@@ -1,16 +1,18 @@
 import torch
 import torchvision
 from torch.optim.lr_scheduler import MultiStepLR, LinearLR
+from ssd.data.transforms.transform import RandomHorizontalFlip, RandomSampleCrop, Resize
 from ssd.modeling import SSD300, SSDMultiboxLoss, backbones, AnchorBoxes
 from tops.config import LazyCall as L
 from ssd.data.rdd import RDDDataset
 from ssd import utils
 from ssd.data.transforms import Normalize, ToTensor, GroundTruthBoxesToAnchors
 from .utils import get_dataset_dir, get_output_dir
+from torch.utils.data import random_split
 
 
 train = dict(
-    batch_size=32,
+    batch_size=16,
     amp=True,  # Automatic mixed precision
     log_interval=20,
     seed=0,
@@ -44,10 +46,10 @@ backbone = L(backbones.BasicModel)(
 loss_objective = L(SSDMultiboxLoss)(anchors="${anchors}")
 
 model = L(SSD300)(
-    feature_extractor="${backbone}",
+    feature_extractor=L(backbones.VGG)(),
     anchors="${anchors}",
     loss_objective="${loss_objective}",
-    num_classes=10 + 1  # Add 1 for background
+    num_classes=4 + 1  # Add 1 for background
 )
 
 optimizer = L(torch.optim.Adam)(
@@ -66,10 +68,13 @@ data_train = dict(
     dataset=L(RDDDataset)(
         country="Norway",
         split="train",
+        split_ratio=0.8,
         remove_empty=True,
         transform=L(torchvision.transforms.Compose)(transforms=[
-            L(ToTensor)(),  # ToTensor has to be applied before conversion to anchors.
-            # GroundTruthBoxesToAnchors assigns each ground truth to anchors, required to compute loss in training.
+            L(RandomSampleCrop)(),
+            L(ToTensor)(),
+            L(RandomHorizontalFlip)(),
+            L(Resize)(imshape="${train.imshape}"),
             L(GroundTruthBoxesToAnchors)(anchors="${anchors}", iou_threshold=0.5),
         ])
     ),
@@ -86,12 +91,12 @@ data_train = dict(
 data_val = dict(
     dataset=L(RDDDataset)(
         country="Norway",
-        split="train",
+        split="val",
+        split_ratio=0.8,
         remove_empty=True,
         transform=L(torchvision.transforms.Compose)(transforms=[
-            L(ToTensor)(),  # ToTensor has to be applied before conversion to anchors.
-            # GroundTruthBoxesToAnchors assigns each ground truth to anchors, required to compute loss in training.
-            L(GroundTruthBoxesToAnchors)(anchors="${anchors}", iou_threshold=0.5),
+            L(ToTensor)(),
+            L(Resize)(imshape="${train.imshape}"),
         ])
     ),
     dataloader=L(torch.utils.data.DataLoader)(
@@ -102,7 +107,4 @@ data_val = dict(
     ])
 )
 
-label_map = {
-    0: "background",
-    **{i + 1: str(i) for i in range(10)}
-}
+label_map =  {idx: cls_name for idx, cls_name in enumerate(RDDDataset.class_names)}

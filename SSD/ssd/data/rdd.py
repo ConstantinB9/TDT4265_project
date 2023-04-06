@@ -1,4 +1,6 @@
 import os
+import random
+from typing import List, Tuple
 import torch.utils.data
 import numpy as np
 import xml.etree.ElementTree as ET
@@ -11,17 +13,19 @@ class RDDDataset(torch.utils.data.Dataset):
     class_names = ('__background__',
                    'd00', 'd10', 'd20', 'd40')
 
-    def __init__(self, country, split, remove_empty, transform=None, keep_difficult=False):
+    def __init__(self, country, split, split_ratio, remove_empty, transform=None, keep_difficult=False):
         """Dataset for VOC data.
         Args:
             data_dir: the root of the VOC2007 or VOC2012 dataset, the directory contains the following sub-directories:
                 Annotations, ImageSets, JPEGImages, SegmentationClass, SegmentationObject.
         """
         self.transform = transform
-        self.data_dir = pathlib.Path(__file__).parent.parent.parent / 'data' / 'rdd2022' / 'RDD2022' / country / split
+        self.data_dir = pathlib.Path(__file__).parent.parent.parent / 'data' / 'rdd2022' / 'RDD2022' / country / 'train'
         self.image_folder =  self.data_dir / 'images'
         self.annotation_folder = self.data_dir / 'annotations'
-        self.image_ids = RDDDataset._read_image_ids(self.image_folder)
+        train_ids, val_ids = RDDDataset._get_train_test_split(imgage_dir=self.image_folder,
+                                                               split_ratio=split_ratio)
+        self.image_ids = train_ids if split == "train" else val_ids
         self.keep_difficult = keep_difficult
         self.class_dict = {class_name: i for i, class_name in enumerate(self.class_names)}
         if remove_empty:
@@ -55,6 +59,32 @@ class RDDDataset(torch.utils.data.Dataset):
     def _read_image_ids(image_folder : pathlib.Path):
         return [f.stem for f in image_folder.glob('*.jpg')]
 
+    @staticmethod
+    def _get_train_test_split(imgage_dir: pathlib.Path, split_ratio: float, seed: int = 42) -> Tuple[List[str], List[str]]:
+        """
+        Get the Image IDs for the test and train sets
+
+        Args:
+            imgage_dir (pathlib.Path): directory containing the images
+            split_ratio (float): percentage of images to be within the training set
+            seed (int): random seed
+        """
+        train_split_file = imgage_dir / f'train_{str(split_ratio).replace(".", "")}_{seed}.txt'
+        val_split_file = imgage_dir / f'val_{str(split_ratio).replace(".", "")}_{seed}.txt'
+        if not (train_split_file.exists() and val_split_file.exists()):
+            all_ids = RDDDataset._read_image_ids(image_folder=imgage_dir)
+            split_idx = int(round(split_ratio*len(all_ids)))
+            random.shuffle(all_ids)
+            train, val = all_ids[:split_idx], all_ids[split_idx:]
+            with train_split_file.open('w+') as f:
+                f.writelines('\n'.join(train))
+            with val_split_file.open('w+') as f:
+                f.writelines('\n'.join(val))
+
+        return train_split_file.read_text().split('\n'), val_split_file.read_text().split('\n')
+                        
+        
+    
     def _get_annotation(self, image_id):
         annotation_file = self.annotation_folder / 'xmls' / f'{image_id}.xml'
         ann_file = ET.parse(annotation_file)
