@@ -46,17 +46,15 @@ backbone = L(backbones.BasicModel)(
 loss_objective = L(SSDMultiboxLoss)(anchors="${anchors}")
 
 model = L(SSD300)(
-    feature_extractor=L(backbones.VGG)(),
+    feature_extractor="${backbone}",
     anchors="${anchors}",
     loss_objective="${loss_objective}",
     num_classes=4 + 1  # Add 1 for background
 )
 
-optimizer = L(torch.optim.Adam)(
+optimizer = L(torch.optim.SGD)(
     # Tip: Scale the learning rate by batch size! 5e-3 is set for a batch size of 32. use 2*5e-3 if you use 64
-    # lr=5e-4, momentum=0.9, weight_decay=0.0005
-    lr=8e-4,
-    # weight_decay=0.1
+    lr=5e-3, momentum=0.9, weight_decay=0.0005
 )
 schedulers = dict(
     linear=L(LinearLR)(start_factor=1, end_factor=0.3, total_iters=10e3),
@@ -92,7 +90,7 @@ data_val = dict(
     dataset=L(RDDDataset)(
         country="Norway",
         split="val",
-        split_ratio=0.8,
+        split_ratio=0.2,
         remove_empty=True,
         transform=L(torchvision.transforms.Compose)(transforms=[
             L(ToTensor)(),
@@ -107,4 +105,4 @@ data_val = dict(
     ])
 )
 
-label_map =  {idx: cls_name for idx, cls_name in enumerate(RDDDataset.class_names)}
+label_map = {idx: cls_name for idx, cls_name in enumerate(RDDDataset.class_names)}

@@ -14,7 +14,7 @@ train = dict(
     amp=True,  # Automatic mixed precision
     log_interval=20,
     seed=0,
-    epochs=32,
+    epochs=5,
     _output_dir=get_output_dir(),
     imshape=(300, 300),
     image_channels=3
@@ -50,14 +50,12 @@ model = L(SSD300)(
     num_classes=10 + 1  # Add 1 for background
 )
 
-optimizer = L(torch.optim.Adam)(
+optimizer = L(torch.optim.SGD)(
     # Tip: Scale the learning rate by batch size! 5e-3 is set for a batch size of 32. use 2*5e-3 if you use 64
-    # lr=5e-4, momentum=0.9, weight_decay=0.0005
-    lr=8e-4,
-    # weight_decay=0.1
+    lr=5e-3, momentum=0.9, weight_decay=0.0005
 )
 schedulers = dict(
-    linear=L(LinearLR)(start_factor=1, end_factor=0.3, total_iters=10e3),
+    linear=L(LinearLR)(start_factor=0.1, end_factor=1, total_iters=500),
     multistep=L(MultiStepLR)(milestones=[], gamma=0.1)
 )
 
@@ -99,5 +97,5 @@ data_val = dict(
 
 label_map = {
     0: "background",
-    **{i + 1: str(i) for i in range(4)}
+    **{i + 1: str(i) for i in range(10)}
 }
