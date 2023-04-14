@@ -1,0 +1,10 @@
+path: rdd2022
+train: 'train/images'
+val: 'val/images'
+ 
+# class names
+names: 
+  0: 'd00'
+  1: 'd10'
+  2: 'd20'
+  3: 'd40'
