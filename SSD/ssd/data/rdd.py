@@ -20,7 +20,7 @@ class RDDDataset(torch.utils.data.Dataset):
                 Annotations, ImageSets, JPEGImages, SegmentationClass, SegmentationObject.
         """
         self.transform = transform
-        self.data_dir = pathlib.Path(__file__).parent.parent.parent / 'data' / 'rdd2022' / 'RDD2022' / country / 'train'
+        self.data_dir = pathlib.Path(__file__).parent.parent.parent.parent / 'data' / 'rdd2022' / 'RDD2022' / country / 'train'
         self.image_folder =  self.data_dir / 'images'
         self.annotation_folder = self.data_dir / 'annotations'
         train_ids, val_ids = RDDDataset._get_train_test_split(imgage_dir=self.image_folder,
@@ -73,6 +73,7 @@ class RDDDataset(torch.utils.data.Dataset):
         val_split_file = imgage_dir / f'val_{str(split_ratio).replace(".", "")}_{seed}.txt'
         if not (train_split_file.exists() and val_split_file.exists()):
             all_ids = RDDDataset._read_image_ids(image_folder=imgage_dir)
+            all_ids = [int(id_s[-6:]) for id_s in all_ids]
             split_idx = int(round(split_ratio*len(all_ids)))
             random.shuffle(all_ids)
             train, val = all_ids[:split_idx], all_ids[split_idx:]
