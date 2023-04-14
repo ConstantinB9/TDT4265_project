@@ -74,7 +74,7 @@ def train(hyperparams):
                 epochs=hyperparams["epochs"],
                 cache = True,
                 resume=False,
-                batch = 84,
+                batch = 32,
                 imgsz = hyperparams["image_size"],
                 optimizer = hyperparams["optimizer"],
                 cos_lr = hyperparams["cos_lr"],
@@ -94,8 +94,8 @@ def train(hyperparams):
 
 if __name__ == "__main__":
     default_params = {
-        "model": "yolov8n.pt",
-        "epochs": 1,
+        "model": "yolov8m.pt",
+        "epochs": 100,
         "image_size": 640,
         "optimizer": "SGD",
         "cos_lr": False,
@@ -107,18 +107,4 @@ if __name__ == "__main__":
         "cls": 0.5,
         "dfl": 1.5,
     }
-    conf = {
-     "model": "yolov8n.pt",
-     "epochs": 60,
-     "image_size": 640,
-     "optimizer": "RMSProp",
-     "cos_lr": True,
-     "lr0": 0.0038444842037809314,
-     "lrf": 0.05585093662035339,
-     "momentum": 0.5199685076232883,
-     "weight_decay": 0.0007351311001240656,
-     "box": 3.9793123361379,
-     "cls": 2.8799137288953887,
-     "dfl": 8.504707675350629
- }
-    train(conf)
+    train(default_params)
