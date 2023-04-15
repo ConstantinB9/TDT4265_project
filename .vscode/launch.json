@@ -5,6 +5,15 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Yolov8 train",
+            "type": "python",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/yolo",
+            "program": "${workspaceFolder}/yolo/train.py",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
             "name": "VOC",
             "type": "python",
             "request": "launch",
@@ -12,7 +21,9 @@
             "program": "${workspaceFolder}/SSD/train.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["configs/voc_vgg.py"]
+            "args": [
+                "configs/voc_vgg.py"
+            ]
         },
         {
             "name": "RDD2022",
@@ -22,7 +33,9 @@
             "program": "${workspaceFolder}/SSD/train.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["configs/rdd2022.py"]
+            "args": [
+                "configs/rdd2022.py"
+            ]
         }
     ]
 }
