@@ -5,9 +5,7 @@ from itertools import repeat
 from multiprocessing.pool import ThreadPool
 
 import numpy as np
-import torch
 import ultralytics.yolo.data.augment as aug
-from data.transforms import Resize
 from paths import data_root
 from tqdm import tqdm
 from ultralytics.yolo.data.dataset import YOLODataset
@@ -19,8 +17,6 @@ from ultralytics.yolo.utils import (
     is_dir_writeable,
 )
 from utils import verify_image_label
-
-CLASS_DICT = {"d00": 0, "d10": 1, "d20": 2, "d40": 3}
 
 
 class RDDDataset(YOLODataset):
@@ -279,6 +275,7 @@ class RDDDataset(YOLODataset):
     def build_transforms(self, hyp=None):
         return aug.Compose(
             [
+                aug.LetterBox(new_shape=(hyp.imgsz, hyp.imgsz), scaleFill=True),
                 aug.Format(
                     bbox_format="xywh",
                     normalize=True,
@@ -287,7 +284,6 @@ class RDDDataset(YOLODataset):
                     batch_idx=True,
                     mask_ratio=hyp.mask_ratio,
                     mask_overlap=hyp.overlap_mask,
-                ),
-                Resize(imshape=(hyp.imgsz, hyp.imgsz)),
+                )
             ]
         )

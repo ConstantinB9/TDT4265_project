@@ -9,6 +9,8 @@ import torch.utils.data
 from PIL import Image, ImageOps
 from ultralytics.yolo.data.utils import IMG_FORMATS, exif_size
 
+CLASS_DICT = {"d00": 0, "d10": 1, "d20": 2, "d40": 3}
+
 
 def load_annotations(lb_file):
     ann_file = ET.parse(pathlib.Path(lb_file))
