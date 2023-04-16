@@ -139,3 +139,5 @@ runs/
 *.yaml
 
 yolo/datasets/
+results/
+yolo/datasets
