@@ -10,6 +10,7 @@ from paths import data_root
 from tqdm import tqdm
 from ultralytics.yolo.data.dataset import YOLODataset
 from ultralytics.yolo.data.utils import HELP_URL, LOGGER, get_hash
+from PIL import Image
 from ultralytics.yolo.utils import (
     LOCAL_RANK,
     NUM_THREADS,
@@ -17,6 +18,8 @@ from ultralytics.yolo.utils import (
     is_dir_writeable,
 )
 from utils import verify_image_label
+import cv2
+import math
 
 
 class RDDDataset(YOLODataset):
@@ -273,17 +276,68 @@ class RDDDataset(YOLODataset):
         return x
 
     def build_transforms(self, hyp=None):
-        return aug.Compose(
+        pre_transform = aug.Compose(
             [
                 aug.LetterBox(new_shape=(hyp.imgsz, hyp.imgsz), scaleFill=True),
-                aug.Format(
-                    bbox_format="xywh",
-                    normalize=True,
-                    return_mask=self.use_segments,
-                    return_keypoint=self.use_keypoints,
-                    batch_idx=True,
-                    mask_ratio=hyp.mask_ratio,
-                    mask_overlap=hyp.overlap_mask,
+                aug.Mosaic(
+                    self,
+                    imgsz=hyp.imgsz,
+                    p=hyp.mosaic,
+                    border=[-hyp.imgsz // 2, -hyp.imgsz // 2],
+                ),
+                aug.CopyPaste(p=hyp.copy_paste),
+                aug.RandomPerspective(
+                    degrees=hyp.degrees,
+                    translate=hyp.translate,
+                    scale=hyp.scale,
+                    shear=hyp.shear,
+                    perspective=hyp.perspective,
                 )
             ]
         )
+        flip_idx = self.data.get("flip_idx", None)  # for keypoints augmentation
+        if self.use_keypoints and flip_idx is None and hyp.fliplr > 0.0:
+            hyp.fliplr = 0.0
+            LOGGER.warning(
+                "WARNING ⚠️ No `flip_idx` provided while training keypoints, setting augmentation 'fliplr=0.0'"
+            )
+        return aug.Compose(
+            [
+                pre_transform,
+                aug.MixUp(self, pre_transform=pre_transform, p=hyp.mixup),
+                aug.Albumentations(p=1.0),
+                aug.RandomHSV(hgain=hyp.hsv_h, sgain=hyp.hsv_s, vgain=hyp.hsv_v),
+                aug.RandomFlip(direction="vertical", p=hyp.flipud),
+                aug.RandomFlip(direction="horizontal", p=hyp.fliplr, flip_idx=flip_idx),
+                aug.Format(bbox_format='xywh',
+                   normalize=True,
+                   return_mask=self.use_segments,
+                   return_keypoint=self.use_keypoints,
+                   batch_idx=True,
+                   mask_ratio=hyp.mask_ratio,
+                   mask_overlap=hyp.overlap_mask)
+                ]
+            )
+        
+
+    def load_image(self, i):
+        # Loads 1 image from dataset index 'i', returns (im, resized hw)
+        im, f, fn = self.ims[i], self.im_files[i], self.npy_files[i]
+        if im is None:  # not cached in RAM
+            if fn.exists():  # load npy
+                im = np.load(fn)
+            else:  # read image
+                im = Image.open(f)
+                im.draft("RGB", (640, 640))
+                im = np.asarray(im)
+                if im is None:
+                    raise FileNotFoundError(f"Image Not Found {f}")
+            h0, w0 = im.shape[:2]  # orig hw
+            r = self.imgsz / max(h0, w0)  # ratio
+            if r != 1:  # if sizes are not equal
+                interp = cv2.INTER_LINEAR if (self.augment or r > 1) else cv2.INTER_AREA
+                im = cv2.resize(
+                    im, (math.ceil(w0 * r), math.ceil(h0 * r)), interpolation=interp
+                )
+            return im, (h0, w0), im.shape[:2]  # im, hw_original, hw_resized
+        return self.ims[i], self.im_hw0[i], self.im_hw[i]  # im, hw_original, hw_resized

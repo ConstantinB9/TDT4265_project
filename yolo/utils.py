@@ -31,10 +31,11 @@ def load_annotations(lb_file):
         y1 = float(bbox.find("ymin").text) - 1
         x2 = float(bbox.find("xmax").text) - 1
         y2 = float(bbox.find("ymax").text) - 1
-        boxes.append([x1, y1, x2, y2])
-        labels.append(CLASS_DICT[class_name])
-        is_difficult_str = obj.find("difficult").text
-        is_difficult.append(int(is_difficult_str) if is_difficult_str else 0)
+        if class_name in CLASS_DICT:
+            boxes.append([x1, y1, x2, y2])
+            labels.append(CLASS_DICT[class_name])
+            is_difficult_str = obj.find("difficult").text
+            is_difficult.append(int(is_difficult_str) if is_difficult_str else 0)
     boxes = bbox_ltrb_to_coco(np.array(boxes), **im_info) if boxes else np.zeros((0, 4))
     boxes = boxes.reshape(-1, 4)
     return (
