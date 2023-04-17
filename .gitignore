@@ -137,3 +137,7 @@ runs/
 *.pt
 *.jpg
 *.yaml
+
+yolo/datasets/
+results/
+yolo/datasets

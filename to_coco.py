@@ -1,9 +1,7 @@
 import functools
-from multiprocessing import Pool
 import pathlib
 import random
-from typing import Tuple, Union
-import cv2
+from typing import Union
 import numpy as np
 import xml.etree.ElementTree as ET
 from PIL import Image
@@ -237,7 +235,7 @@ class COCO_Converter:
     def export_yolov8(
         self,
         train_split: float = 0.9,
-        dst: pathlib.Path = pathlib.Path("/mnt/disks/sdb/datasets/rdd2022"),
+        dst: pathlib.Path = pathlib.Path(__file__).parent / 'yolo' / "datasets" / "rdd2022",
     ):
         all_ids = self.image_ids
         random.shuffle(self.image_ids)
