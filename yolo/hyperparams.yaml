@@ -1,5 +1,5 @@
 model: yolov8m.pt
-epochs: 50
+epochs: 100
 cache: true
 resume: false
 batch: -1
@@ -14,7 +14,7 @@ box: 7.5
 cls: 0.5
 dfl: 1.5
 mosaic: 0
-degrees: 10
+degrees: 5
 shear: 5
 fliplr: 0.25
 scale: 0.2
