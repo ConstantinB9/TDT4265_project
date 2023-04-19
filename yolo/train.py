@@ -10,6 +10,7 @@ from tqdm.contrib.concurrent import process_map
 from trainer import CustomTrainer
 from ultralytics import YOLO
 from ultralytics.yolo.engine.model import TASK_MAP
+from val import CustomValidator
 
 
 def resize_move(
@@ -50,68 +51,20 @@ def resize_images(
         )
 
 
-def train(hyperparams):
+def train():
+    hyperparams = yaml.load(
+        (pathlib.Path(__file__).parent / "hyperparams.yaml").open("r"),
+        Loader=yaml.Loader,
+    )
     print(json.dumps(hyperparams, indent=4))
-    image_size = (hyperparams["image_size"], hyperparams["image_size"])
-
     coco_file = pathlib.Path(__file__).parent / "config.yaml"
-    config = yaml.load(coco_file.open("r"), Loader=yaml.Loader)
-    datasets_root = pathlib.Path(__file__).parent / "datasets"
-    original_dataset = datasets_root / config["path"]
 
-    work_dataset_root = datasets_root / (
-        config["path"] + f"_{image_size[0]}x{image_size[1]}"
-    )
-    if not work_dataset_root.exists():
-        resize_images(
-            original_dataset_root=original_dataset,
-            work_dataset_root=work_dataset_root,
-            image_size=image_size,
-        )
-
-    config["path"] = work_dataset_root.name
-    new_config = coco_file.parent / f"config_{image_size[0]}x{image_size[1]}.yaml"
-    yaml.dump(config, new_config.open("w"))
-
-    runs_root = pathlib.Path(__file__).parent.parent / "runs"
     TASK_MAP["detect"][1] = CustomTrainer
-    model = YOLO(hyperparams["model"])
-    model.train(
-        data=str(new_config),
-        epochs=hyperparams["epochs"],
-        cache=True,
-        resume=False,
-        batch=32,
-        imgsz=hyperparams["image_size"],
-        optimizer=hyperparams["optimizer"],
-        cos_lr=hyperparams["cos_lr"],
-        lr0=hyperparams["lr0"],
-        lrf=hyperparams["lrf"],
-        momentum=hyperparams["momentum"],
-        weight_decay=hyperparams["weight_decay"],
-        box=hyperparams["box"],
-        cls=hyperparams["cls"],
-        dfl=hyperparams["dfl"],
-    )
-    metrics = model.val()
-    print(metrics)
-    # success = model.export(format="onnx")
-    return metrics.results_dict
+    TASK_MAP["detect"][2] = CustomValidator
+    model = YOLO(hyperparams.pop("model"), task="detect")
+    # model.val(data=str(coco_file))
+    model.train(data=str(coco_file), **hyperparams)
 
 
 if __name__ == "__main__":
-    default_params = {
-        "model": "yolov8n.pt",
-        "epochs": 100,
-        "image_size": 640,
-        "optimizer": "SGD",
-        "cos_lr": False,
-        "lr0": 0.01,
-        "lrf": 0.01,
-        "momentum": 0.937,
-        "weight_decay": 0.0005,
-        "box": 7.5,
-        "cls": 0.5,
-        "dfl": 1.5,
-    }
-    train(default_params)
+    train()

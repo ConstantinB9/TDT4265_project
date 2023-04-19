@@ -1,21 +1,20 @@
 import json
+import math
 import pathlib
 import random
 from itertools import repeat
 from multiprocessing.pool import ThreadPool
 
+import cv2
 import numpy as np
 import ultralytics.yolo.data.augment as aug
 from paths import data_root
+from PIL import Image
 from tqdm import tqdm
 from ultralytics.yolo.data.dataset import YOLODataset
 from ultralytics.yolo.data.utils import HELP_URL, LOGGER, get_hash
-from ultralytics.yolo.utils import (
-    LOCAL_RANK,
-    NUM_THREADS,
-    TQDM_BAR_FORMAT,
-    is_dir_writeable,
-)
+from ultralytics.yolo.utils import (LOCAL_RANK, NUM_THREADS, TQDM_BAR_FORMAT,
+                                    is_dir_writeable)
 from utils import verify_image_label
 
 
@@ -38,6 +37,7 @@ class RDDDataset(YOLODataset):
         data=None,
         classes=None,
         split_ratio=0.8,
+        mode="train",
     ):
         self.root_dir = data_root / "rdd2022" / "RDD2022"
         self.data_dir = self.root_dir / "Norway" / "train"
@@ -59,12 +59,16 @@ class RDDDataset(YOLODataset):
                 )
 
         split_data = json.load(self.split_file.open("r"))
-        list_to_int = lambda iter: [int(v) for v in iter]
 
         self.train_ids = [int(v) for v in split_data["train"]]
         self.val_ids = [int(v) for v in split_data["val"]]
         self.id_map = {int(k): v for k, v in split_data["id_map"].items()}
         self.path_map = {int(k): v for k, v in split_data["path_map"].items()}
+        self.resize_transform = aug.LetterBox(
+            new_shape=(imgsz, imgsz), scaleup=False, scaleFill=True
+        )
+        self.mode = mode
+
         super().__init__(
             img_path,
             imgsz,
@@ -118,7 +122,7 @@ class RDDDataset(YOLODataset):
             )
 
         self.label_files = [get_lable_file(im_f) for im_f in self.im_files]
-        cache_path = pathlib.Path(self.label_files[0]).parent / "labels.cache"
+        cache_path = pathlib.Path(self.label_files[0]).parent / f"{self.mode}.cache"
         try:
             import gc
 
@@ -272,18 +276,116 @@ class RDDDataset(YOLODataset):
             )
         return x
 
+    def cache_images(self, cache):
+        """Cache images to memory or disk."""
+        gb = 0  # Gigabytes of cached images
+        self.im_hw0, self.im_hw = [None] * self.ni, [None] * self.ni
+        fcn = self.cache_images_to_disk if cache == "disk" else self.load_image
+        with ThreadPool(NUM_THREADS) as pool:
+            results = pool.imap(fcn, range(self.ni))
+            pbar = tqdm(
+                enumerate(results),
+                total=self.ni,
+                bar_format=TQDM_BAR_FORMAT,
+                disable=LOCAL_RANK > 0,
+            )
+            for i, x in pbar:
+                if cache == "disk":
+                    gb += self.npy_files[i].stat().st_size
+                else:  # 'ram'
+                    (
+                        self.ims[i],
+                        self.im_hw0[i],
+                        self.im_hw[i],
+                    ) = x  # im, hw_orig, hw_resized = load_image(self, i)
+                    gb += self.ims[i].nbytes
+                pbar.desc = f"{self.prefix}Caching images ({gb / 1E9:.1f}GB {cache})"
+            pbar.close()
+
     def build_transforms(self, hyp=None):
-        return aug.Compose(
-            [
-                aug.LetterBox(new_shape=(hyp.imgsz, hyp.imgsz), scaleFill=True),
-                aug.Format(
-                    bbox_format="xywh",
-                    normalize=True,
-                    return_mask=self.use_segments,
-                    return_keypoint=self.use_keypoints,
-                    batch_idx=True,
-                    mask_ratio=hyp.mask_ratio,
-                    mask_overlap=hyp.overlap_mask,
+        if self.augment:
+            pre_transform = aug.Compose(
+                [
+                    aug.Mosaic(
+                        self,
+                        imgsz=hyp.imgsz,
+                        p=hyp.mosaic,
+                        border=[-hyp.imgsz // 2, -hyp.imgsz // 2],
+                    ),
+                    aug.CopyPaste(p=hyp.copy_paste),
+                    aug.RandomPerspective(
+                        degrees=hyp.degrees,
+                        translate=hyp.translate,
+                        scale=hyp.scale,
+                        shear=hyp.shear,
+                        perspective=hyp.perspective,
+                    ),
+                ]
+            )
+            flip_idx = self.data.get("flip_idx", None)  # for keypoints augmentation
+            if self.use_keypoints and flip_idx is None and hyp.fliplr > 0.0:
+                hyp.fliplr = 0.0
+                LOGGER.warning(
+                    "WARNING ⚠️ No `flip_idx` provided while training keypoints, setting augmentation 'fliplr=0.0'"
                 )
+            transform = aug.Compose(
+                [
+                    pre_transform,
+                    aug.MixUp(self, pre_transform=pre_transform, p=hyp.mixup),
+                    aug.Albumentations(p=1.0),
+                    aug.RandomHSV(hgain=hyp.hsv_h, sgain=hyp.hsv_s, vgain=hyp.hsv_v),
+                    aug.RandomFlip(direction="vertical", p=hyp.flipud),
+                    aug.RandomFlip(
+                        direction="horizontal", p=hyp.fliplr, flip_idx=flip_idx
+                    ),
+                ]
+            )
+        else:
+            transform = aug.Compose([aug.LetterBox(scaleFill=True)])
+        transform.append(
+            aug.Format(
+                bbox_format="xywh",
+                normalize=True,
+                return_mask=self.use_segments,
+                return_keypoint=self.use_keypoints,
+                batch_idx=True,
+                mask_ratio=hyp.mask_ratio,
+                mask_overlap=hyp.overlap_mask,
+            )
+        )
+        return transform
+
+    def load_image(self, i):
+        # Loads 1 image from dataset index 'i', returns (im, resized hw)
+        im, f, fn = self.ims[i], self.im_files[i], self.npy_files[i]
+        if im is None:  # not cached in RAM
+            if fn.exists():  # load npy
+                im = np.load(fn)
+            else:  # read image
+                im = cv2.imread(f)
+                im = cv2.resize(im, (self.imgsz, self.imgsz))
+                if im is None:
+                    raise FileNotFoundError(f"Image Not Found {f}")
+            h0, w0 = im.shape[:2]  # orig hw
+            r = self.imgsz / max(h0, w0)  # ratio
+            if r != 1:  # if sizes are not equal
+                interp = cv2.INTER_LINEAR if (self.augment or r > 1) else cv2.INTER_AREA
+                im = cv2.resize(
+                    im, (math.ceil(w0 * r), math.ceil(h0 * r)), interpolation=interp
+                )
+            return im, (h0, w0), im.shape[:2]  # im, hw_original, hw_resized
+        return self.ims[i], self.im_hw0[i], self.im_hw[i]  # im, hw_original, hw_resized
+
+    def get_weights(self):
+        label_counts = np.array(
+            [
+                [
+                    int(lbl["cls"].shape[0] == 0),
+                    *[int(i in lbl["cls"]) for i in range(4)],
+                ]
+                for lbl in self.labels
             ]
         )
+        rel_label_count = label_counts / np.sum(label_counts, axis=0)
+        weights = np.max(rel_label_count, axis=1)
+        return weights / np.sum(weights)
