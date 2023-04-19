@@ -1,4 +1,4 @@
-model: runs/detect/train25/weights/best.pt
+model: yolov8s.pt
 epochs: 50
 cache: true
 resume: false

@@ -106,10 +106,9 @@ class CustomTrainer(yolo.v8.detect.DetectionTrainer):
         if RANK in (-1, 0):
             callbacks.add_integration_callbacks(self)
 
-    def get_dataloader(self, dataset_path, batch_size, rank=0, mode="train"):
-        assert mode in ["train", "val"]
+    def create_dataset(self, dataset_path, batch_size, rank=0, mode="train"):
         gs = max(int(de_parallel(self.model).stride.max() if self.model else 0), 32)
-        dataset = RDDDataset(
+        return RDDDataset(
             img_path=dataset_path,
             imgsz=self.args.imgsz,
             batch_size=batch_size,
@@ -127,6 +126,10 @@ class CustomTrainer(yolo.v8.detect.DetectionTrainer):
             data=self.data,
             mode=mode,
         )
+
+    def get_dataloader(self, dataset_path, batch_size, rank=0, mode="train"):
+        assert mode in ["train", "val"]
+        dataset = self.create_dataset(dataset_path, batch_size, rank, mode)
 
         workers = 8
         shuffle = mode == "train"

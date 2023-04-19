@@ -4,6 +4,7 @@ import pathlib
 import random
 from itertools import repeat
 from multiprocessing.pool import ThreadPool
+from typing import List
 
 import cv2
 import numpy as np
@@ -38,10 +39,14 @@ class RDDDataset(YOLODataset):
         classes=None,
         split_ratio=0.8,
         mode="train",
+        pretrain=False
     ):
+        countries = ["Norway"] if not pretrain else \
+            ["China_Drone", "China_MotorBike", "Czech", "India", "Japan", "United_States"]
         self.root_dir = data_root / "rdd2022" / "RDD2022"
-        self.data_dir = self.root_dir / "Norway" / "train"
-        self.split_file = self.data_dir / "split.json"
+        self.data_dir = [self.root_dir / country / "train" for country in countries]
+        self.split_file = self.data_dir[0] / "split.json" if not pretrain else self.root_dir / "pretrain-split.json"
+
 
         if not self.split_file.exists():
             self.create_split(
@@ -89,10 +94,14 @@ class RDDDataset(YOLODataset):
 
     @staticmethod
     def create_split(
-        data_dir: pathlib.Path, split_file: pathlib.Path, split_ratio: float
+        data_dir: List[pathlib.Path], split_file: pathlib.Path, split_ratio: float
     ):
-        img_dir = data_dir / "images"
-        all_files = [f for f in img_dir.iterdir() if f.is_file()]
+        all_files = []
+        for dir in data_dir:
+            img_dir = dir / "images"
+            all_dir_files = [f for f in img_dir.iterdir() if f.is_file()]
+            all_files.extend(all_dir_files)
+
         path_map = {k: v for k, v in enumerate(all_files)}
         id_map = {k: v.stem for k, v in path_map.items()}
         all_ids = list(id_map.keys())
