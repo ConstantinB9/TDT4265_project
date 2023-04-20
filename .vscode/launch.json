@@ -14,6 +14,15 @@
             "justMyCode": false
         },
         {
+            "name": "Yolov8 create submission",
+            "type": "python",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/yolo",
+            "program": "${workspaceFolder}/yolo/create_submission.py",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
             "name": "Yolov8 tune",
             "type": "python",
             "request": "launch",
