@@ -16,7 +16,7 @@ from ultralytics.yolo.data.dataset import YOLODataset
 from ultralytics.yolo.data.utils import HELP_URL, LOGGER, get_hash
 from ultralytics.yolo.utils import (LOCAL_RANK, NUM_THREADS, TQDM_BAR_FORMAT,
                                     is_dir_writeable)
-from utils import verify_image_label
+from utils import verify_image_label, CLASS_DICT
 
 
 class RDDDataset(YOLODataset):
@@ -51,8 +51,8 @@ class RDDDataset(YOLODataset):
         self.root_dir = data_root / "rdd2022" / "RDD2022"
         self.data_dir = [self.root_dir / country / "train" for country in countries]
         self.split_file = self.data_dir[0] / "split.json" if not pretrain else self.root_dir / "pretrain-split.json"
-
-
+        self.img_cache_file = self.root_dir / f'image_cache_{"pretrain" if pretrain else ""}.npz'
+        
         if not self.split_file.exists():
             self.create_split(
                 data_dir=self.data_dir,
@@ -101,12 +101,14 @@ class RDDDataset(YOLODataset):
     def get_test_images(imgsz=640):
         test_root = RDDDataset.root_dir / "Norway" / "test"
         test_files = [(int(line.split(' ')[0]), line.split(' ')[1]) for line in (RDDDataset.root_dir / "Norway" / "submission_img_ids.txt").read_text().split('\n') if line]
-        imgs = []
-        for _, img_file in tqdm(test_files, desc="Loading test images"):
-            img = cv2.imread(str(test_root / "images" / img_file))
+        for i, img_file in tqdm(test_files, desc="Loading test images"):
+            img = cv2.imread(str(test_root / "images" / img_file))#[:,:,::-1]
+            
+            if img.size == 0:
+                tqdm.write(f"ERROR: IMG {img_file} not found!")
+                continue
             # img = cv2.resize(img, (imgsz, imgsz))
-            imgs.append(img)
-        return imgs
+            yield (i, img)
 
     @staticmethod
     def create_split(
@@ -413,7 +415,7 @@ class RDDDataset(YOLODataset):
             [
                 [
                     int(lbl["cls"].shape[0] == 0),
-                    *[int(i in lbl["cls"]) for i in range(4)],
+                    *[int(i in lbl["cls"]) for i in range(len(CLASS_DICT))],
                 ]
                 for lbl in self.labels
             ]

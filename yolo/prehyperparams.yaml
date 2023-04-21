@@ -1,6 +1,6 @@
-model: yolov8s.pt
+model: yolov8x.pt
 epochs: 50
-cache: true
+cache: false
 resume: false
 batch: -1
 imgsz: 640
@@ -13,8 +13,8 @@ weight_decay: 0.0005
 box: 7.5
 cls: 0.5
 dfl: 1.5
-mosaic: 0
-degrees: 5
-shear: 5
+mosaic: 1
+degrees: 10
+shear: 10
 fliplr: 0.25
-scale: 0.2
+scale: 0.5
