@@ -20,6 +20,11 @@ from utils import verify_image_label
 
 
 class RDDDataset(YOLODataset):
+    
+    root_dir = data_root / "rdd2022" / "RDD2022"
+    data_dir = root_dir / "Norway" / "train"
+    split_file = data_dir / "split.json"
+
     def __init__(
         self,
         img_path,
@@ -91,6 +96,17 @@ class RDDDataset(YOLODataset):
             data,
             classes,
         )
+    
+    @staticmethod
+    def get_test_images(imgsz=640):
+        test_root = RDDDataset.root_dir / "Norway" / "test"
+        test_files = [(int(line.split(' ')[0]), line.split(' ')[1]) for line in (RDDDataset.root_dir / "Norway" / "submission_img_ids.txt").read_text().split('\n') if line]
+        imgs = []
+        for _, img_file in tqdm(test_files, desc="Loading test images"):
+            img = cv2.imread(str(test_root / "images" / img_file))
+            # img = cv2.resize(img, (imgsz, imgsz))
+            imgs.append(img)
+        return imgs
 
     @staticmethod
     def create_split(
@@ -287,6 +303,12 @@ class RDDDataset(YOLODataset):
 
     def cache_images(self, cache):
         """Cache images to memory or disk."""
+        if self.img_cache_file.exists():
+            cached_data = np.load(self.img_cache_file)
+            self.ims = cached_data["ims"]
+            self.im_hw0 = cached_data["im_hw0"]
+            self.im_hw = cached_data["im_hw"]
+            return
         gb = 0  # Gigabytes of cached images
         self.im_hw0, self.im_hw = [None] * self.ni, [None] * self.ni
         fcn = self.cache_images_to_disk if cache == "disk" else self.load_image
@@ -310,6 +332,7 @@ class RDDDataset(YOLODataset):
                     gb += self.ims[i].nbytes
                 pbar.desc = f"{self.prefix}Caching images ({gb / 1E9:.1f}GB {cache})"
             pbar.close()
+        np.savez(self.img_cache_file, ims = self.ims, im_hw0=self.im_hw0, im_hw=self.im_hw)
 
     def build_transforms(self, hyp=None):
         if self.augment:
