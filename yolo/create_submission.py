@@ -1,16 +1,130 @@
+from copy import deepcopy
 from itertools import islice
 import json
 import pathlib
+from typing import Tuple
 import cv2
+import numpy as np
 import torch
 from ultralytics import YOLO
 from dataset import RDDDataset
 from tqdm import tqdm
 from ultralytics.yolo.utils.plotting import Annotator
+from ultralytics.yolo.engine.results import Boxes
+
+
+class ImageFragment:
+    def __init__(self, img, center: Tuple[int, int]) -> None:
+        self.im = img
+        self.center = center
+        self.shape = self.im.shape
+        self.translate = torch.tensor([self.center[0] - self.shape[0] / 2, self.center[1] - self.shape[1] / 2]).cuda()
+        
+    def to_global_result(self, result):
+        glob_res = deepcopy(result)
+        for box in glob_res.boxes:
+            box.xyxy[0, :2] += self.translate
+            box.xyxy[0, 2:] += self.translate
+            box.xywh[0, :2] += self.translate
+        return glob_res
+
+def get_iou(box1, box2):
+    """
+    Implement the intersection over union (IoU) between box1 and box2
+        
+    Arguments:
+        box1 -- first box, numpy array with coordinates (ymin, xmin, ymax, xmax)
+        box2 -- second box, numpy array with coordinates (ymin, xmin, ymax, xmax)
+    """
+    # ymin, xmin, ymax, xmax = box
+    
+    x_left = max(box1[0].item(), box2[0].item())
+    y_top = max(box1[1].item(), box2[1].item())
+    x_right = min(box1[2].item(), box2[2].item())
+    y_bottom = min(box1[3].item(), box2[3].item())
+
+    if x_right < x_left or y_bottom < y_top:
+        return 0.0
+
+    # The intersection of two axis-aligned bounding boxes is always an
+    # axis-aligned bounding box
+    intersection_area = (x_right - x_left) * (y_bottom - y_top)
+
+            # compute the area of both AABBs
+    box1_area = (box1[2].item() - box1[0].item()) * (box1[3].item() - box1[1].item())
+    box2_area = (box2[2].item() - box2[0].item()) * (box2[3].item() - box2[1].item())
+
+            # compute the intersection over union by taking the intersection
+            # area and dividing it by the sum of prediction + ground-truth
+            # areas - the interesection area
+    iou = intersection_area / float(box1_area + box2_area - intersection_area)
+    assert iou >= 0.0
+    assert iou <= 1.0
+    return iou
+
+def get_merged_box(boxes) -> Boxes:
+    conf = sum(b.conf for b in boxes) / len(boxes)
+    cls_preds = {}
+    for box in boxes:
+        if box.cls.item() not in cls_preds:
+            cls_preds[box.cls.item()] = box.conf.item()
+        else:
+            cls_preds[box.cls.item()] += box.conf.item()
+
+    cls = max(cls_preds, key=cls_preds.get)
+    
+    return Boxes(
+        torch.tensor(
+                    [
+                        min(box.xyxy[0][0] for box in boxes),
+                        min(box.xyxy[0][1] for box in boxes),
+                        max(box.xyxy[0][2] for box in boxes),
+                        max(box.xyxy[0][3] for box in boxes),
+                        conf,
+                        cls
+                    ]
+                ),
+        orig_shape=boxes[0].orig_shape
+    )
+
+def are_connected(box1, box2, iou_th = 0.25):
+    if box1 == box2: return True
+    iou = get_iou(box1.xyxy[0], box2.xyxy[0])
+    if iou < iou_th: return False
+    elif box1.cls == box2.cls:
+        return True
+    elif iou > min(iou_th * 1.5, 0.9):
+        return True
+    return False
+
+
+def merge_boxes(boxes):
+    result_set = []
+    work_set = deepcopy(boxes)
+    while work_set:
+        connections = [
+            [are_connected(b1, b2) for b2 in work_set]
+            for b1 in work_set
+        ]
+        num_connections = [sum(conn) for conn in connections]
+        
+        if max(num_connections) <= 1:
+            result_set.extend(work_set)
+            break
+        
+        max_conn_idx = np.argmax(num_connections)
+        merge_idx = [i for i, connected in  enumerate(connections[max_conn_idx]) if connected]
+        boxes_to_merge = [work_set[i] for i in merge_idx]
+        result_set.append(
+            get_merged_box(boxes_to_merge)
+        )
+        [work_set.remove(box) for box in boxes_to_merge]
+        
+    return result_set
 
 
 def main():
-    train_idx = 34
+    train_idx = 200
     model_file = (
         pathlib.Path(__file__).parent.parent
         / "runs"
@@ -26,45 +140,63 @@ def main():
     coco_results = []
     box_ids = 0
     batch = []
-    while not batch or len(batch) == batch_size:
-        batch = list(islice(imgs, batch_size))
-        batch_imgs = [x[1] for x in batch]
-        resized_imgs = [cv2.resize(im, (640, 640)) for im in batch_imgs]
-        img_num = [x[0] for x in batch]
-        results = model(resized_imgs, stream=True)
-        for i, result in tqdm(
-            zip(img_num, results), desc="Predicting", total=batch_size
-        ):
-            h0, w0 = batch_imgs[i % 64].shape[:2]
-            # annotator = Annotator(batch_imgs[i % batch_size])
-            # boxes = result.boxes
-            # for box in boxes:
-            #     b = box.xyxyn[
-            #         0
-            #     ]  # get box coordinates in (top, left, bottom, right) format
-            #     c = box.cls
-            #     annotator.box_label(torch.stack((b[0] * w0, b[1] * h0, b[2] * w0, b[3] * h0)), str(int(c.item())))
-            # frame = annotator.result()
-            # cv2.imwrite(f"test_predictions/pred{i}.jpg", frame)
-            coco_data = [
-                {
-                    "image_id": i,
-                    "bbox": [
-                        (box[0].item() - box[2].item() / 2) * w0,
-                        (box[1].item() - box[3].item() / 2) * h0,
-                        box[2].item() * w0,
-                        box[3].item() * h0,
-                    ],
-                    "category_id": int(cls.item()),
-                    "id": box_ids + j,
-                    "score": float(conf.item()),
-                }
-                for j, (box, conf, cls) in enumerate(
-                    zip(result.boxes.xywhn, result.boxes.conf, result.boxes.cls)
+    fragment_size = 640*2
+    
+    for img_id, img in imgs:
+
+        imgs_x = (img.shape[1] // fragment_size) + 2
+        imgs_y = (img.shape[0] // fragment_size) + 2
+        h, w = img.shape[:2]
+
+        dx = np.linspace(fragment_size/2, w - fragment_size/2, imgs_x)
+        dy = np.linspace(fragment_size/2, h - fragment_size/2, imgs_y)
+        
+        fragments = []
+        for x in dx:
+            for y in dy:
+                x_start = int(round(x - fragment_size / 2))
+                x_end = int(round(x + fragment_size / 2))
+                y_start = int(round(y - fragment_size / 2))
+                y_end = int(round(y + fragment_size / 2))
+                img_seg = img[y_start:y_end,x_start:x_end]
+                fragments.append(
+                    ImageFragment(
+                        img=img_seg,
+                        center=(int(round(x)), int(round(y)))
+                    )
                 )
+        results = zip(fragments, model([frag.im for frag in fragments]))
+        global_results = [frag.to_global_result(result) for frag, result in results]
+        boxes = [box for res in global_results for box in res.boxes]
+        merged_boxes = merge_boxes(boxes)
+
+        h0, w0 = img.shape[:2]
+        annotator = Annotator(img)
+        for box in merged_boxes:
+            b = box.xyxy[
+                    0
+                ]  # get box coordinates in (top, left, bottom, right) format
+            c = box.cls
+            annotator.box_label(b, str(int(c.item())))
+        frame = annotator.result()
+        cv2.imwrite(f"test_predictions/pred{img_id}.jpg", frame)
+        coco_data = [
+                {
+                    "image_id": img_id,
+                    "bbox": [
+                        box.xyxy[0][0].item(),
+                        box.xyxy[0][1].item(),
+                        box.xyxy[0][2].item() - box.xyxy[0][0].item(),
+                        box.xyxy[0][3].item() - box.xyxy[0][1].item()
+                    ],
+                    "category_id": int(box.cls.item()),
+                    "id": box_ids + j,
+                    "score": float(box.conf.item()),
+                }
+                for j, box in enumerate(merged_boxes)
             ]
-            box_ids += len(result.boxes.data)
-            coco_results.extend(coco_data)
+        box_ids += len(merged_boxes)
+        coco_results.extend(coco_data)
 
     json.dump(
         coco_results,

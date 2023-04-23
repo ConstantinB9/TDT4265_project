@@ -6,6 +6,7 @@ from itertools import repeat
 from multiprocessing.pool import ThreadPool
 from typing import List
 
+from augment import CropFragment
 import cv2
 import numpy as np
 import ultralytics.yolo.data.augment as aug
@@ -46,6 +47,7 @@ class RDDDataset(YOLODataset):
         mode="train",
         pretrain=False
     ):
+        self.pretrain = pretrain
         countries = ["Norway"] if not pretrain else \
             ["China_Drone", "China_MotorBike", "Czech", "India", "Japan", "United_States"]
         self.root_dir = data_root / "rdd2022" / "RDD2022"
@@ -100,7 +102,7 @@ class RDDDataset(YOLODataset):
     @staticmethod
     def get_test_images(imgsz=640):
         test_root = RDDDataset.root_dir / "Norway" / "test"
-        test_files = [(int(line.split(' ')[0]), line.split(' ')[1]) for line in (RDDDataset.root_dir / "Norway" / "submission_img_ids.txt").read_text().split('\n') if line]
+        test_files = [(int(line.split(' ')[0]), line.split(' ')[1]) for line in (RDDDataset.root_dir / "Norway" / "image_ids.txt").read_text().split('\n') if line]
         for i, img_file in tqdm(test_files, desc="Loading test images"):
             img = cv2.imread(str(test_root / "images" / img_file))#[:,:,::-1]
             
@@ -340,6 +342,7 @@ class RDDDataset(YOLODataset):
         if self.augment:
             pre_transform = aug.Compose(
                 [
+                    *([CropFragment(fragment_size=640*2)] if not self.pretrain else []),
                     aug.Mosaic(
                         self,
                         imgsz=hyp.imgsz,
@@ -375,7 +378,9 @@ class RDDDataset(YOLODataset):
                 ]
             )
         else:
-            transform = aug.Compose([aug.LetterBox(scaleFill=True)])
+            transform = aug.Compose([
+                *([CropFragment(fragment_size=640*2)] if not self.pretrain else []),
+                aug.LetterBox(scaleFill=True)])
         transform.append(
             aug.Format(
                 bbox_format="xywh",
@@ -397,12 +402,12 @@ class RDDDataset(YOLODataset):
                 im = np.load(fn)
             else:  # read image
                 im = cv2.imread(f)
-                im = cv2.resize(im, (self.imgsz, self.imgsz))
+                # im = cv2.resize(im, (self.imgsz, self.imgsz))
                 if im is None:
                     raise FileNotFoundError(f"Image Not Found {f}")
             h0, w0 = im.shape[:2]  # orig hw
             r = self.imgsz / max(h0, w0)  # ratio
-            if r != 1:  # if sizes are not equal
+            if r != 1 and False:  # if sizes are not equal
                 interp = cv2.INTER_LINEAR if (self.augment or r > 1) else cv2.INTER_AREA
                 im = cv2.resize(
                     im, (math.ceil(w0 * r), math.ceil(h0 * r)), interpolation=interp
