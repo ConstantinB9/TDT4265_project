@@ -1,5 +1,5 @@
-model: ../runs/detect/train198/weights/best.pt
-epochs: 50
+model: runs/detect/train93/weights/best.pt
+epochs: 20
 cache: true
 resume: false
 batch: -1
@@ -18,3 +18,5 @@ degrees: 5
 shear: 5
 fliplr: 0.25
 scale: 0.2
+warmup_epochs: 5
+pretrained: true

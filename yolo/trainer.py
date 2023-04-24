@@ -141,14 +141,14 @@ class CustomTrainer(yolo.v8.detect.DetectionTrainer):
             [os.cpu_count() // max(nd, 1), batch_size if batch_size > 1 else 0, workers]
         )  # number of workers
 
-        sampler = (
-            None
-            if rank == -1
-            else distributed.DistributedSampler(dataset, shuffle=shuffle)
-        )
+        # sampler = (
+        #     None
+        #     if rank == -1
+        #     else distributed.DistributedSampler(dataset, shuffle=shuffle)
+        # )
 
         sampler = (
-            WeightedRandomSampler(
+            torch.utils.data.WeightedRandomSampler(
                 weights=dataset.get_weights(), num_samples=len(dataset)
             )
             if mode == "train"
