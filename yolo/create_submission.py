@@ -28,6 +28,21 @@ class ImageFragment:
             box.xywh[0, :2] += self.translate
         return glob_res
 
+def get_intersection_area(box1, box2):
+    x_left = max(box1[0].item(), box2[0].item())
+    y_top = max(box1[1].item(), box2[1].item())
+    x_right = min(box1[2].item(), box2[2].item())
+    y_bottom = min(box1[3].item(), box2[3].item())
+
+    if x_right < x_left or y_bottom < y_top:
+        return 0.0
+
+    # The intersection of two axis-aligned bounding boxes is always an
+    # axis-aligned bounding box
+    intersection_area = (x_right - x_left) * (y_bottom - y_top)
+    return intersection_area
+
+
 def get_iou(box1, box2):
     """
     Implement the intersection over union (IoU) between box1 and box2
@@ -63,7 +78,7 @@ def get_iou(box1, box2):
     return iou
 
 def get_merged_box(boxes) -> Boxes:
-    conf = sum(b.conf for b in boxes) / len(boxes)
+    conf = max(b.conf for b in boxes) #/ len(boxes)
     cls_preds = {}
     for box in boxes:
         if box.cls.item() not in cls_preds:
@@ -88,13 +103,20 @@ def get_merged_box(boxes) -> Boxes:
     )
 
 def are_connected(box1, box2, iou_th = 0.25):
-    if box1 == box2: return True
-    iou = get_iou(box1.xyxy[0], box2.xyxy[0])
-    if iou < iou_th: return False
-    elif box1.cls == box2.cls:
+    return False
+    box1_data, box2_data = box1.xyxy[0], box2.xyxy[0]
+    int_area = get_intersection_area(box1_data, box2_data)
+    rel_b1 = int_area / ((box1_data[2].item()-box1_data[0].item()) * (box1_data[3].item() - box1_data[1].item()))
+    rel_b2 = int_area / ((box2_data[2].item()-box2_data[0].item()) * (box2_data[3].item() - box2_data[1].item()))
+    if max(rel_b1, rel_b2) > 0.3 and box1.cls == box2.cls:
         return True
-    elif iou > min(iou_th * 1.5, 0.9):
-        return True
+    # if box1 == box2: return True
+    # iou = get_iou(box1.xyxy[0], box2.xyxy[0])
+    # if iou < iou_th: return False
+    # elif box1.cls == box2.cls:
+    #     return True
+    # elif iou > min(iou_th * 1.5, 0.9):
+    #     return True
     return False
 
 
@@ -124,7 +146,7 @@ def merge_boxes(boxes):
 
 
 def main():
-    train_idx = 200
+    train_idx = 32
     model_file = (
         pathlib.Path(__file__).parent.parent
         / "runs"
@@ -170,7 +192,7 @@ def main():
         boxes = [box for res in global_results for box in res.boxes]
         merged_boxes = merge_boxes(boxes)
 
-        h0, w0 = img.shape[:2]
+        # h0, w0 = img.shape[:2]
         annotator = Annotator(img)
         for box in merged_boxes:
             b = box.xyxy[
