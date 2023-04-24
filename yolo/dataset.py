@@ -17,6 +17,7 @@ from ultralytics.yolo.data.utils import HELP_URL, LOGGER, get_hash
 from ultralytics.yolo.utils import (LOCAL_RANK, NUM_THREADS, TQDM_BAR_FORMAT,
                                     is_dir_writeable)
 from utils import verify_image_label
+import custom_augmentation as ca
 
 
 class RDDDataset(YOLODataset):
@@ -42,10 +43,12 @@ class RDDDataset(YOLODataset):
         pretrain=False
     ):
         countries = ["Norway"] if not pretrain else \
-            ["China_Drone", "China_MotorBike", "Czech", "India", "Japan", "United_States"]
+            ["Czech", "United_States"]
+           # ["China_Drone", "China_MotorBike", "Czech", "India", "Japan", "United_States"]
         self.root_dir = data_root / "rdd2022" / "RDD2022"
         self.data_dir = [self.root_dir / country / "train" for country in countries]
         self.split_file = self.data_dir[0] / "split.json" if not pretrain else self.root_dir / "pretrain-split.json"
+        self.pretrain = pretrain
 
 
         if not self.split_file.exists():
@@ -322,6 +325,7 @@ class RDDDataset(YOLODataset):
                         border=[-hyp.imgsz // 2, -hyp.imgsz // 2],
                     ),
                     aug.CopyPaste(p=hyp.copy_paste),
+                    # aug.RandomHSV(hgain=0.5, sgain=0.5, vgain=0.5),
                     aug.RandomPerspective(
                         degrees=hyp.degrees,
                         translate=hyp.translate,
@@ -329,6 +333,7 @@ class RDDDataset(YOLODataset):
                         shear=hyp.shear,
                         perspective=hyp.perspective,
                     ),
+                    # transforms.Lambda(lambda image: random_noise(image, mode="salt", amount=0.05))
                 ]
             )
             flip_idx = self.data.get("flip_idx", None)  # for keypoints augmentation
@@ -337,10 +342,13 @@ class RDDDataset(YOLODataset):
                 LOGGER.warning(
                     "WARNING ⚠️ No `flip_idx` provided while training keypoints, setting augmentation 'fliplr=0.0'"
                 )
+
             transform = aug.Compose(
                 [
                     pre_transform,
+                    ca.CustomAlbumentations(),
                     aug.MixUp(self, pre_transform=pre_transform, p=hyp.mixup),
+                    # ca.CustomAlbumentations(),
                     aug.Albumentations(p=1.0),
                     aug.RandomHSV(hgain=hyp.hsv_h, sgain=hyp.hsv_s, vgain=hyp.hsv_v),
                     aug.RandomFlip(direction="vertical", p=hyp.flipud),
