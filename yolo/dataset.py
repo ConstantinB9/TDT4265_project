@@ -21,6 +21,11 @@ import custom_augmentation as ca
 
 
 class RDDDataset(YOLODataset):
+    
+    root_dir = data_root / "rdd2022" / "RDD2022"
+    data_dir = root_dir / "Norway" / "train"
+    split_file = data_dir / "split.json"
+
     def __init__(
         self,
         img_path,
@@ -49,8 +54,6 @@ class RDDDataset(YOLODataset):
         self.data_dir = [self.root_dir / country / "train" for country in countries]
         self.split_file = self.data_dir[0] / "split.json" if not pretrain else self.root_dir / "pretrain-split.json"
         self.pretrain = pretrain
-
-
         if not self.split_file.exists():
             self.create_split(
                 data_dir=self.data_dir,
@@ -94,6 +97,19 @@ class RDDDataset(YOLODataset):
             data,
             classes,
         )
+    
+    @staticmethod
+    def get_test_images(imgsz=640):
+        test_root = RDDDataset.root_dir / "Norway" / "test"
+        test_files = [(int(line.split(' ')[0]), line.split(' ')[1]) for line in (RDDDataset.root_dir / "Norway" / "submission_img_ids.txt").read_text().split('\n') if line]
+        for i, img_file in tqdm(test_files, desc="Loading test images"):
+            img = cv2.imread(str(test_root / "images" / img_file))#[:,:,::-1]
+            
+            if img.size == 0:
+                tqdm.write(f"ERROR: IMG {img_file} not found!")
+                continue
+            # img = cv2.resize(img, (imgsz, imgsz))
+            yield (i, img)
 
     @staticmethod
     def create_split(
@@ -398,7 +414,7 @@ class RDDDataset(YOLODataset):
             [
                 [
                     int(lbl["cls"].shape[0] == 0),
-                    *[int(i in lbl["cls"]) for i in range(4)],
+                    *[int(i in lbl["cls"]) for i in range(len(CLASS_DICT))],
                 ]
                 for lbl in self.labels
             ]
