@@ -55,6 +55,8 @@ class RDDDataset(YOLODataset):
         self.split_file = self.root_dir / "split_train.json" if not pretrain else self.root_dir / "pretrain-split.json"
         self.img_cache_file = self.root_dir / f'image_cache_{"pretrain" if pretrain else ""}.npz'
         
+        self.filter_classes = [0, 2]
+        
         if not self.split_file.exists():
             self.create_split(
                 data_dir=self.data_dir,
@@ -227,6 +229,10 @@ class RDDDataset(YOLODataset):
             raise ValueError(
                 f"All labels empty in {cache_path}, can not start training without labels. {HELP_URL}"
             )
+        for lbl in labels:
+            mask = ~ np.in1d(lbl["cls"], self.filter_classes)
+            lbl["bboxes"] = lbl["bboxes"][mask]
+            lbl["cls"] = lbl["cls"][mask]
         return labels
 
     def cache_labels(self, path=pathlib.Path("./labels.cache")):
@@ -436,5 +442,6 @@ class RDDDataset(YOLODataset):
             ]
         )
         rel_label_count = label_counts / np.sum(label_counts, axis=0)
+        rel_label_count = np.nan_to_num(rel_label_count)
         weights = np.max(rel_label_count, axis=1)
         return weights / np.sum(weights)
