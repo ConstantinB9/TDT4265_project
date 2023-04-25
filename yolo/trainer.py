@@ -6,7 +6,7 @@ import random
 import numpy as np
 import torch
 from dataset import RDDDataset
-from torch.utils.data import DataLoader, distributed
+from torch.utils.data import DataLoader, distributed, WeightedRandomSampler
 from ultralytics import yolo
 from ultralytics.yolo.cfg import get_cfg
 from ultralytics.yolo.utils import (DEFAULT_CFG, RANK, SETTINGS, __version__,
@@ -16,6 +16,7 @@ from ultralytics.yolo.utils.files import increment_path
 from ultralytics.yolo.utils.torch_utils import (de_parallel, init_seeds,
                                                 select_device)
 from val import CustomValidator
+
 
 
 def seed_worker(worker_id):  # noqa
@@ -106,10 +107,9 @@ class CustomTrainer(yolo.v8.detect.DetectionTrainer):
         if RANK in (-1, 0):
             callbacks.add_integration_callbacks(self)
 
-    def get_dataloader(self, dataset_path, batch_size, rank=0, mode="train"):
-        assert mode in ["train", "val"]
+    def create_dataset(self, dataset_path, batch_size, rank=0, mode="train"):
         gs = max(int(de_parallel(self.model).stride.max() if self.model else 0), 32)
-        dataset = RDDDataset(
+        return RDDDataset(
             img_path=dataset_path,
             imgsz=self.args.imgsz,
             batch_size=batch_size,
@@ -128,6 +128,10 @@ class CustomTrainer(yolo.v8.detect.DetectionTrainer):
             mode=mode,
         )
 
+    def get_dataloader(self, dataset_path, batch_size, rank=0, mode="train"):
+        assert mode in ["train", "val"]
+        dataset = self.create_dataset(dataset_path, batch_size, rank, mode)
+
         workers = 8
         shuffle = mode == "train"
         batch_size = min(batch_size, len(dataset))
@@ -137,19 +141,19 @@ class CustomTrainer(yolo.v8.detect.DetectionTrainer):
             [os.cpu_count() // max(nd, 1), batch_size if batch_size > 1 else 0, workers]
         )  # number of workers
 
-        sampler = (
-            None
-            if rank == -1
-            else distributed.DistributedSampler(dataset, shuffle=shuffle)
-        )
-
         # sampler = (
-        #     WeightedRandomSampler(
-        #         weights=dataset.get_weights(), num_samples=len(dataset)
-        #     )
-        #     if mode == "train"
-        #     else None
+        #     None
+        #     if rank == -1
+        #     else distributed.DistributedSampler(dataset, shuffle=shuffle)
         # )
+
+        sampler = (
+            WeightedRandomSampler(
+                weights=dataset.get_weights(), num_samples=len(dataset)
+            )
+            if mode == "train"
+            else None
+        )
 
         loader = DataLoader
         generator = torch.Generator()

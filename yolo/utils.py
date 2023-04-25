@@ -9,7 +9,12 @@ import torch.utils.data
 from PIL import Image, ImageOps
 from ultralytics.yolo.data.utils import IMG_FORMATS, exif_size
 
-CLASS_DICT = {"d00": 0, "d10": 1, "d20": 2, "d40": 3}
+CLASS_DICT = {
+    "d00": 0,
+    "d10": 1,
+    "d20": 2,
+    "d40": 3
+}
 
 
 def load_annotations(lb_file):
@@ -34,8 +39,10 @@ def load_annotations(lb_file):
         if class_name in CLASS_DICT:
             boxes.append([x1, y1, x2, y2])
             labels.append(CLASS_DICT[class_name])
-            is_difficult_str = obj.find("difficult").text
-            is_difficult.append(int(is_difficult_str) if is_difficult_str else 0)
+            difficult = obj.find("difficult")
+            if difficult:
+                is_difficult_str = obj.find("difficult").text
+                is_difficult.append(int(is_difficult_str) if is_difficult_str else 0)
     boxes = bbox_ltrb_to_coco(np.array(boxes), **im_info) if boxes else np.zeros((0, 4))
     boxes = boxes.reshape(-1, 4)
     return (
@@ -136,6 +143,7 @@ def verify_image_label(args):
         return im_file, lb, shape, segments, keypoints, nm, nf, ne, nc, msg
     except Exception as e:
         nc = 1
+        annotations = load_annotations(lb_file)
         msg = f"{prefix}WARNING ⚠️ {im_file}: ignoring corrupt image/label: {e}"
         return [None, None, None, None, None, nm, nf, ne, nc, msg]
 
