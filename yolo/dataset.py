@@ -299,7 +299,7 @@ class RDDDataset(YOLODataset):
                     msgs.append(msg)
                 pbar.desc = f"{desc} {nf} images, {nm + ne} backgrounds, {nc} corrupt"
             pbar.close()
-
+                
         if msgs:
             LOGGER.info("\n".join(msgs))
         if nf == 0:
@@ -352,7 +352,7 @@ class RDDDataset(YOLODataset):
         if self.augment:
             pre_transform = aug.Compose(
                 [
-                    *([CropFragment(fragment_size=1280, resize_shape=self.imgsz)] if not self.pretrain else []),
+                    *([CropFragment(fragment_size=640, resize_shape=self.imgsz)] if not self.pretrain else []),
                     aug.Mosaic(
                         self,
                         imgsz=hyp.imgsz,
@@ -389,7 +389,7 @@ class RDDDataset(YOLODataset):
             )
         else:
             transform = aug.Compose([
-                *([CropFragment(fragment_size=1280, gravitate_to_labels=True, resize_shape=self.imgsz)] if not self.pretrain else []),
+                *([CropFragment(fragment_size=640, gravitate_to_labels=True, resize_shape=self.imgsz)] if not self.pretrain else []),
                 aug.LetterBox(scaleFill=True)])
         transform.append(
             aug.Format(
@@ -412,7 +412,7 @@ class RDDDataset(YOLODataset):
                 im = np.load(fn)
             else:  # read image
                 im = cv2.imread(f)
-                # im = cv2.resize(im, (im.shape[1] // 2, im.shape[0] // 2) if not self.pretrain else (self.imgsz, self.imgsz))
+                im = cv2.resize(im, (im.shape[1] // 2, im.shape[0] // 2) if not self.pretrain else (self.imgsz, self.imgsz))
                 if im is None:
                     raise FileNotFoundError(f"Image Not Found {f}")
             h0, w0 = im.shape[:2]  # orig hw
@@ -435,6 +435,9 @@ class RDDDataset(YOLODataset):
                 for lbl in self.labels
             ]
         )
+        label_weights = np.array([0.5, 1, 5, 1, 3])
+        label_counts = np.multiply(label_counts, label_weights)
+        
         rel_label_count = label_counts / np.sum(label_counts, axis=0)
         weights = np.max(rel_label_count, axis=1)
         return weights / np.sum(weights)
