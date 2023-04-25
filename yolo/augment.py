@@ -30,7 +30,7 @@ class CropFragment(BaseTransform):
             cx = int(round(np.random.normal(loc=avg_x, scale=img.shape[1]/4)))
             cy = int(round(np.random.normal(loc=avg_y, scale=img.shape[0]/4)))
             cx = np.clip(cx, xmin, xmax)
-            cy = np.clip(cy, xmin, xmax)
+            cy = np.clip(cy, ymin, ymax)
         else:
             cx = int(round(np.random.uniform(xmin, xmax, 1)[0]))
             cy = int(round(np.random.uniform(ymin, ymax, 1)[0]))
@@ -39,7 +39,8 @@ class CropFragment(BaseTransform):
             int(cx-self.fragment_size/2):int(cx+self.fragment_size/2),
             int(cy-self.fragment_size/2):int(cy+self.fragment_size/2)
                   ]
-        img = cv2.resize(img, (self.resize_shape, self.resize_shape))
+        if (img.shape[0], img.shape[1]) != (self.resize_shape, self.resize_shape):
+            img = cv2.resize(img, (self.resize_shape, self.resize_shape))
         
         dx = cx - self.fragment_size / 2
         dy = cy - self.fragment_size / 2
