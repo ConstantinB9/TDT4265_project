@@ -52,7 +52,7 @@ class RDDDataset(YOLODataset):
             ["China_Drone", "China_MotorBike", "Czech", "India", "Japan", "United_States"]
         self.root_dir = data_root / "rdd2022" / "RDD2022"
         self.data_dir = [self.root_dir / country / "train" for country in countries]
-        self.split_file = self.data_dir[0] / "split.json" if not pretrain else self.root_dir / "pretrain-split.json"
+        self.split_file = self.root_dir / "split_train.json" if not pretrain else self.root_dir / "pretrain-split.json"
         self.img_cache_file = self.root_dir / f'image_cache_{"pretrain" if pretrain else ""}.npz'
         
         if not self.split_file.exists():
@@ -60,6 +60,7 @@ class RDDDataset(YOLODataset):
                 data_dir=self.data_dir,
                 split_file=self.split_file,
                 split_ratio=split_ratio,
+                pretrain=self.pretrain
             )
         else:
             split_data = json.load(self.split_file.open("r"))
@@ -114,20 +115,36 @@ class RDDDataset(YOLODataset):
 
     @staticmethod
     def create_split(
-        data_dir: List[pathlib.Path], split_file: pathlib.Path, split_ratio: float
+        data_dir: List[pathlib.Path], split_file: pathlib.Path, split_ratio: float, pretrain: bool = False
     ):
-        all_files = []
-        for dir in data_dir:
+        split_dirs = data_dir if pretrain else [d for d in data_dir if d.parent.name == "Norway"]            
+            
+        split_files = []
+        for dir in split_dirs:
             img_dir = dir / "images"
-            all_dir_files = [f for f in img_dir.iterdir() if f.is_file()]
-            all_files.extend(all_dir_files)
+            split_dir_files = [f for f in img_dir.iterdir() if f.is_file()]
+            split_files.extend(split_dir_files)
 
-        path_map = {k: v for k, v in enumerate(all_files)}
+        path_map = {k: v for k, v in enumerate(split_files)}
         id_map = {k: v.stem for k, v in path_map.items()}
         all_ids = list(id_map.keys())
         random.shuffle(all_ids)
         split_idx = int(round((len(all_ids) * split_ratio)))
         train_ids, val_ids = all_ids[:split_idx], all_ids[split_idx:]
+        
+        exclusive_train_files = []
+        train_dirs = [] if pretrain else [d for d in data_dir if d.parent.name != "Norway"]
+        for dir in train_dirs:
+            img_dir = dir / "images"
+            train_dir_files = [f for f in img_dir.iterdir() if f.is_file()]
+            exclusive_train_files.extend(train_dir_files)
+        
+        supp_train_paths = {k: v for k, v in enumerate(exclusive_train_files, start=max(id_map.keys()) + 1)}
+        path_map.update(supp_train_paths)
+        id_map.update({k: v.stem for k, v in supp_train_paths.items()})
+        train_ids.extend(list(supp_train_paths.keys()))
+
+        
         json.dump(
             {
                 "split_ratio": split_ratio,
@@ -307,12 +324,6 @@ class RDDDataset(YOLODataset):
 
     def cache_images(self, cache):
         """Cache images to memory or disk."""
-        if self.img_cache_file.exists():
-            cached_data = np.load(self.img_cache_file)
-            self.ims = cached_data["ims"]
-            self.im_hw0 = cached_data["im_hw0"]
-            self.im_hw = cached_data["im_hw"]
-            return
         gb = 0  # Gigabytes of cached images
         self.im_hw0, self.im_hw = [None] * self.ni, [None] * self.ni
         fcn = self.cache_images_to_disk if cache == "disk" else self.load_image
@@ -336,13 +347,12 @@ class RDDDataset(YOLODataset):
                     gb += self.ims[i].nbytes
                 pbar.desc = f"{self.prefix}Caching images ({gb / 1E9:.1f}GB {cache})"
             pbar.close()
-        np.savez(self.img_cache_file, ims = self.ims, im_hw0=self.im_hw0, im_hw=self.im_hw)
 
     def build_transforms(self, hyp=None):
         if self.augment:
             pre_transform = aug.Compose(
                 [
-                    *([CropFragment(fragment_size=640)] if not self.pretrain else []),
+                    *([CropFragment(fragment_size=1280, resize_shape=self.imgsz)] if not self.pretrain else []),
                     aug.Mosaic(
                         self,
                         imgsz=hyp.imgsz,
@@ -379,7 +389,7 @@ class RDDDataset(YOLODataset):
             )
         else:
             transform = aug.Compose([
-                *([CropFragment(fragment_size=640, gravitate_to_labels=False)] if not self.pretrain else []),
+                *([CropFragment(fragment_size=1280, gravitate_to_labels=True, resize_shape=self.imgsz)] if not self.pretrain else []),
                 aug.LetterBox(scaleFill=True)])
         transform.append(
             aug.Format(
@@ -402,7 +412,7 @@ class RDDDataset(YOLODataset):
                 im = np.load(fn)
             else:  # read image
                 im = cv2.imread(f)
-                im = cv2.resize(im, (im.shape[0] // 2, im.shape[1] // 2) if not self.pretrain else (self.imgsz, self.imgsz))
+                # im = cv2.resize(im, (im.shape[1] // 2, im.shape[0] // 2) if not self.pretrain else (self.imgsz, self.imgsz))
                 if im is None:
                     raise FileNotFoundError(f"Image Not Found {f}")
             h0, w0 = im.shape[:2]  # orig hw
