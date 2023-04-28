@@ -1,6 +1,7 @@
 import collections
 from copy import deepcopy
 import itertools
+import math
 from typing import List, Tuple, Union
 
 import numpy as np
@@ -142,8 +143,8 @@ def merge_boxes(boxes: List[Boxes], intersection_th = 0.3) -> List[Boxes]:
 
 
 def get_prediction_fragment(model, img, fragment_size: int = 1280, intersection_th=0.3, *args, **kwargs) -> List[Boxes]:
-        imgs_x = (img.shape[1] // fragment_size) + 2
-        imgs_y = (img.shape[0] // fragment_size) + 2
+        imgs_x = math.ceil(img.shape[1] * 1.5 / fragment_size)
+        imgs_y = math.ceil(img.shape[0] * 1.5 / fragment_size)
         h, w = img.shape[:2]
 
         dx = np.linspace(fragment_size/2, w - fragment_size/2, imgs_x)
