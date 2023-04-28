@@ -141,3 +141,4 @@ runs/
 yolo/datasets/
 results/
 yolo/datasets
+run_data/
