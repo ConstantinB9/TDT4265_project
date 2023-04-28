@@ -235,3 +235,18 @@ class CustomValidator(DetectionValidator):
             if self.args.plots or self.args.save_json:
                 LOGGER.info(f"Results saved to {colorstr('bold', self.save_dir)}")
             return stats
+
+    def print_results(self):
+        """Prints training/validation set metrics per class."""
+        pf = '%22s' + '%11i' * 2 + '%11.3g' * len(self.metrics.keys)  # print format
+        LOGGER.info(pf % ('all', self.seen, self.nt_per_class.sum(), *self.metrics.mean_results()))
+        if self.nt_per_class.sum() == 0:
+            LOGGER.warning(
+                f'WARNING ⚠️ no labels found in {self.args.task} set, can not compute metrics without labels')
+
+        # Print results per class
+        for i, c in enumerate(self.metrics.ap_class_index):
+            LOGGER.info(pf % (self.names[c], self.seen, self.nt_per_class[c], *self.metrics.class_result(i)))
+
+        if self.args.plots:
+            self.confusion_matrix.plot(save_dir=self.save_dir, names=list(self.names.values()))
