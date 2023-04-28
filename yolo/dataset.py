@@ -2,7 +2,7 @@ import json
 import math
 import pathlib
 import random
-from itertools import repeat
+from itertools import repeat, chain
 from multiprocessing.pool import ThreadPool
 from typing import List
 
@@ -23,8 +23,6 @@ from utils import verify_image_label, CLASS_DICT
 class RDDDataset(YOLODataset):
     
     root_dir = data_root / "rdd2022" / "RDD2022"
-    data_dir = root_dir / "Norway" / "train"
-    split_file = data_dir / "split.json"
 
     def __init__(
         self,
@@ -45,16 +43,33 @@ class RDDDataset(YOLODataset):
         classes=None,
         split_ratio=0.8,
         mode="train",
-        pretrain=False
+        pretrain=False,
+        countries = None
     ):
         self.pretrain = pretrain
-        countries = ["Norway"] if not pretrain else \
-            ["China_Drone", "China_MotorBike", "Czech", "India", "Japan", "United_States"]
+        if countries is None:
+            countries = (
+                [
+                    "China_Drone",
+                    "China_MotorBike",
+                    "Czech",
+                    "India",
+                    "Japan",
+                    "United_States",
+                ]
+                if pretrain
+                else ["Norway"]
+            )
         self.root_dir = data_root / "rdd2022" / "RDD2022"
         self.data_dir = [self.root_dir / country / "train" for country in countries]
-        self.split_file = self.root_dir / "split_train.json" if not pretrain else self.root_dir / "pretrain-split.json"
+        self.split_file = (
+            self.data_dir[0] / "pretrain-split.json"
+            if pretrain
+            else self.data_dir[0] / "split_train.json"
+        )
+        print(self.split_file)
         self.img_cache_file = self.root_dir / f'image_cache_{"pretrain" if pretrain else ""}.npz'
-        
+
         if not self.split_file.exists():
             self.create_split(
                 data_dir=self.data_dir,
@@ -139,12 +154,11 @@ class RDDDataset(YOLODataset):
             train_dir_files = [f for f in img_dir.iterdir() if f.is_file()]
             exclusive_train_files.extend(train_dir_files)
         
-        supp_train_paths = {k: v for k, v in enumerate(exclusive_train_files, start=max(id_map.keys()) + 1)}
+        supp_train_paths = {k: v for k, v in enumerate(exclusive_train_files, start=max([*list(id_map.keys()), 0]) + 1)}
         path_map.update(supp_train_paths)
         id_map.update({k: v.stem for k, v in supp_train_paths.items()})
         train_ids.extend(list(supp_train_paths.keys()))
 
-        
         json.dump(
             {
                 "split_ratio": split_ratio,
@@ -157,6 +171,8 @@ class RDDDataset(YOLODataset):
         )
 
     def get_img_files(self, img_path):
+        if img_path == "all":
+            return [self.path_map[id_] for id_ in chain(self.train_ids, self.val_ids)]
         ids = self.train_ids if img_path == "train" else self.val_ids
         return [self.path_map[id_] for id_ in ids]
 
@@ -438,3 +454,28 @@ class RDDDataset(YOLODataset):
         rel_label_count = label_counts / np.sum(label_counts, axis=0)
         weights = np.max(rel_label_count, axis=1)
         return weights / np.sum(weights)
+
+
+if __name__ == "__main__":
+    countries = ["Norway", "China_Drone", "China_MotorBike", "Czech", "India", "Japan", "United_States"]
+    coco_file = pathlib.Path().parent / "config.yaml"
+    print(str(coco_file))
+    from ultralytics.yolo.utils import DEFAULT_CFG
+    from ultralytics.yolo.cfg import get_cfg
+
+    hyp = get_cfg(DEFAULT_CFG, None)
+    data = {
+                "path": "rd2022",
+                "names": {0: "d00", 1: "d10", 2: "d20", 3: "d40"},
+                "nc": 4,
+            }
+
+    datasets = {c: RDDDataset(
+        img_path="all",
+        hyp = hyp,
+        countries=[c],
+        data = data,
+        pretrain=True
+        )
+        for c in countries
+        }
