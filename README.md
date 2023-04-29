@@ -47,7 +47,8 @@ this uses the hyperparameters at `yolo/prehyperparams.yaml`
 python yolo/train.py
 ``
 
-this uses the hyperparameters at `yolo/hyperparams.yaml`
+this uses the hyperparameters at `yolo/hyperparams.yaml`. The model specified in this file should be replaced by the path to the run from the model obtained by the pretrain step. 
+
 ## How to Predict
 The prediction API with image fragmentation and model ensembling can be imported from `yolo/predict`:
 
