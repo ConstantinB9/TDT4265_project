@@ -79,4 +79,12 @@ boxes =  get_prediction(
 				intersection_th=0.3,
 				)
 ```
+
+## Image Fragmentation Approach
+We utalize an image fragmentation approach to maximize the information passed to the model. This means, that multiple prediction from different fragments have to be merged into a global prediction.
+To do so, we iterate over all box combinations and check, whether they "are connected" - if so, they are merged.
+The current rule on determining connections is based on the relative instersection area for each box.
+Testing showed, that a threshold of 30% provided the best results.  --> This means if any of the boxes overlapps mor than 30% of its area with the other box, they are merged.
+
+This is still a very rudamentary approach with a lot of room for improvement.
  
