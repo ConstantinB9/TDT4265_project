@@ -1,8 +1,9 @@
 import json
 import pathlib
-from ultralytics import YOLO
-from dataset import RDDDataset
 
+from ultralytics import YOLO
+
+from dataset import RDDDataset
 from predict import get_prediction
 
 

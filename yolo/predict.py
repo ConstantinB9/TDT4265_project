@@ -1,13 +1,13 @@
 import collections
-from copy import deepcopy
 import itertools
 import math
+from copy import deepcopy
 from typing import List, Tuple, Union
 
 import numpy as np
 import torch
-from ultralytics.yolo.utils.plotting import Annotator
 from ultralytics.yolo.engine.results import Boxes
+from ultralytics.yolo.utils.plotting import Annotator
 
 
 class ImageFragment:

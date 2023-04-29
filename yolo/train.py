@@ -3,11 +3,12 @@ import json
 import pathlib
 
 import yaml
-from trainer import CustomTrainer
 from ultralytics import YOLO
 from ultralytics.yolo.engine.model import TASK_MAP
-from val import CustomValidator
+
+from trainer import CustomTrainer
 from utils import CLASS_DICT
+from val import CustomValidator
 
 
 def freeze_layers(trainer, num_layers):

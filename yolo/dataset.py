@@ -6,22 +6,19 @@ from itertools import repeat
 from multiprocessing.pool import ThreadPool
 from typing import List
 
-from augment import CropFragment
 import cv2
 import numpy as np
 import ultralytics.yolo.data.augment as aug
-from paths import data_root
 from PIL import Image
 from tqdm import tqdm
 from ultralytics.yolo.data.dataset import YOLODataset
 from ultralytics.yolo.data.utils import HELP_URL, LOGGER, get_hash
-from ultralytics.yolo.utils import (
-    LOCAL_RANK,
-    NUM_THREADS,
-    TQDM_BAR_FORMAT,
-    is_dir_writeable,
-)
-from utils import verify_image_label, CLASS_DICT
+from ultralytics.yolo.utils import (LOCAL_RANK, NUM_THREADS, TQDM_BAR_FORMAT,
+                                    is_dir_writeable)
+
+from augment import CropFragment
+from paths import data_root
+from utils import CLASS_DICT, verify_image_label
 
 
 class RDDDataset(YOLODataset):
@@ -537,7 +534,7 @@ class RDDDataset(YOLODataset):
         Weights every sample based on the total frequency of it's contained labels.
         E.g. a sample containing a rare label class gets a higher weight.
         This should be used for inbalanced datasets
-        
+
         Returns:
             np.array: vector of weights
         """

@@ -2,9 +2,10 @@ import random
 
 import numpy as np
 import torch
-from dataset import RDDDataset
-from ultralytics.yolo.utils import (DEFAULT_CFG, __version__, colorstr)
+from ultralytics.yolo.utils import DEFAULT_CFG, __version__, colorstr
 from ultralytics.yolo.utils.torch_utils import de_parallel
+
+from dataset import RDDDataset
 from trainer import CustomTrainer
 
 
@@ -17,6 +18,7 @@ def seed_worker(worker_id):  # noqa
 
 class CustomPreTrainer(CustomTrainer):
     """Trainer Class used during pretraining"""
+
     def __init__(self, cfg=DEFAULT_CFG, overrides=None, _callbacks=None):
         """
         Initializes the CustomTrainer class.
@@ -51,5 +53,5 @@ class CustomPreTrainer(CustomTrainer):
             classes=self.args.classes,
             data=self.data,
             mode=mode,
-            pretrain=True
+            pretrain=True,
         )

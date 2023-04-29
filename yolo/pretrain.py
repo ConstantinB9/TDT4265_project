@@ -7,9 +7,10 @@ from typing import Tuple
 import cv2
 import yaml
 from tqdm.contrib.concurrent import process_map
-from pretrainer import CustomPreTrainer
 from ultralytics import YOLO
 from ultralytics.yolo.engine.model import TASK_MAP
+
+from pretrainer import CustomPreTrainer
 from val import CustomValidator
 
 
