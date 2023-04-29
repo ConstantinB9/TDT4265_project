@@ -27,6 +27,11 @@ def seed_worker(worker_id):  # noqa
 
 
 class CustomTrainer(yolo.v8.detect.DetectionTrainer):
+    """Custom Trainer to use correct Dataset implementation.
+
+    Args:
+        yolo (_type_): _description_
+    """
     def __init__(self, cfg=DEFAULT_CFG, overrides=None, _callbacks=None):
         """
         Initializes the CustomTrainer class.

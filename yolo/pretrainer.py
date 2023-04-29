@@ -16,6 +16,7 @@ def seed_worker(worker_id):  # noqa
 
 
 class CustomPreTrainer(CustomTrainer):
+    """Trainer Class used during pretraining"""
     def __init__(self, cfg=DEFAULT_CFG, overrides=None, _callbacks=None):
         """
         Initializes the CustomTrainer class.

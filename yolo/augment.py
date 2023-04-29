@@ -4,7 +4,17 @@ from ultralytics.yolo.data.augment import BaseTransform
 
 
 class CropFragment(BaseTransform):
+    """
+    Class to crop out a fragment of an image
+    """
     def __init__(self, fragment_size:int = 1280, gravitate_to_labels: bool = True, resize_shape: int = 640) -> None:
+        """
+
+        Args:
+            fragment_size (int, optional): Size of the square image fragment to cout out. Defaults to 1280.
+            gravitate_to_labels (bool, optional): Whether to increase the probability of gt labels within the cropped fragment. Defaults to True.
+            resize_shape (int, optional): Output size the fragment is reshaped to. Defaults to 640.
+        """
         super().__init__()
         self.fragment_size = fragment_size
         self.gravitate_to_labels = gravitate_to_labels
@@ -17,12 +27,14 @@ class CropFragment(BaseTransform):
         instances.convert_bbox(format='xyxy')
         instances.denormalize(*img.shape[:2][::-1])
 
-        
+        # bounding positions for center of fragment
         xmin, xmax = self.fragment_size / 2, img.shape[0] - self.fragment_size / 2
         ymin, ymax = self.fragment_size / 2, img.shape[1] - self.fragment_size / 2
         boxes = instances.bboxes
 
         if self.gravitate_to_labels and len(boxes):
+            # choose center point based on a normal distribution around
+            # the average box position
             avg_box_loc = np.mean(boxes, axis=0)
             avg_x = (avg_box_loc[1] + avg_box_loc[3]) / 2
             avg_y = (avg_box_loc[0] + avg_box_loc[2]) / 2       
@@ -32,6 +44,7 @@ class CropFragment(BaseTransform):
             cx = np.clip(cx, xmin, xmax)
             cy = np.clip(cy, ymin, ymax)
         else:
+            # choose center postion on a uniform distribution
             cx = int(round(np.random.uniform(xmin, xmax, 1)[0]))
             cy = int(round(np.random.uniform(ymin, ymax, 1)[0]))
         

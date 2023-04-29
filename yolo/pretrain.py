@@ -14,6 +14,9 @@ from val import CustomValidator
 
 
 def pretrain():
+    """
+    Script to run pretraining on the whole RDD2022 dataset excluding Norway
+    """
     hyperparams = yaml.load(
         (pathlib.Path(__file__).parent / "prehyperparams.yaml").open("r"),
         Loader=yaml.Loader,

@@ -15,13 +15,22 @@ from PIL import Image
 from tqdm import tqdm
 from ultralytics.yolo.data.dataset import YOLODataset
 from ultralytics.yolo.data.utils import HELP_URL, LOGGER, get_hash
-from ultralytics.yolo.utils import (LOCAL_RANK, NUM_THREADS, TQDM_BAR_FORMAT,
-                                    is_dir_writeable)
+from ultralytics.yolo.utils import (
+    LOCAL_RANK,
+    NUM_THREADS,
+    TQDM_BAR_FORMAT,
+    is_dir_writeable,
+)
 from utils import verify_image_label, CLASS_DICT
 
 
 class RDDDataset(YOLODataset):
-    
+    """ "
+    Custom Dataset to support the RDD2022 data / formats.
+    Most parts of this class are derived from its parent - the YOLO Dataset implementation -
+    and are rewritten with some minor tweaks and changes to adapt to the RDDDataset.
+    """
+
     root_dir = data_root / "rdd2022" / "RDD2022"
     data_dir = root_dir / "Norway" / "train"
     split_file = data_dir / "split.json"
@@ -45,24 +54,40 @@ class RDDDataset(YOLODataset):
         classes=None,
         split_ratio=0.8,
         mode="train",
-        pretrain=False
+        pretrain=False,
     ):
         self.pretrain = pretrain
-        countries = ["Norway"] if not pretrain else \
-            ["China_Drone", "China_MotorBike", "Czech", "India", "Japan", "United_States"]
+        countries = (
+            ["Norway"]
+            if not pretrain
+            else [
+                "China_Drone",
+                "China_MotorBike",
+                "Czech",
+                "India",
+                "Japan",
+                "United_States",
+            ]
+        )
         self.root_dir = data_root / "rdd2022" / "RDD2022"
         self.data_dir = [self.root_dir / country / "train" for country in countries]
-        self.split_file = self.root_dir / "split_train.json" if not pretrain else self.root_dir / "pretrain-split.json"
-        self.img_cache_file = self.root_dir / f'image_cache_{"pretrain" if pretrain else ""}.npz'
-        
-        self.filter_classes = [[0, 2], [1, 3]][0]
-        
+        self.split_file = (
+            self.root_dir / "split_train.json"
+            if not pretrain
+            else self.root_dir / "pretrain-split.json"
+        )
+        self.img_cache_file = (
+            self.root_dir / f'image_cache_{"pretrain" if pretrain else ""}.npz'
+        )
+
+        self.filter_classes = [[0, 2], [1, 3]][1]
+
         if not self.split_file.exists():
             self.create_split(
                 data_dir=self.data_dir,
                 split_file=self.split_file,
                 split_ratio=split_ratio,
-                pretrain=self.pretrain
+                pretrain=self.pretrain,
             )
         else:
             split_data = json.load(self.split_file.open("r"))
@@ -101,14 +126,23 @@ class RDDDataset(YOLODataset):
             data,
             classes,
         )
-    
+
     @staticmethod
     def get_test_images(imgsz=640):
+        """
+        Create a generator object to iterate over all Norwegian Test images
+        """
         test_root = RDDDataset.root_dir / "Norway" / "test"
-        test_files = [(int(line.split(' ')[0]), line.split(' ')[1]) for line in (RDDDataset.root_dir / "Norway" / "image_ids.txt").read_text().split('\n') if line]
+        test_files = [
+            (int(line.split(" ")[0]), line.split(" ")[1])
+            for line in (RDDDataset.root_dir / "Norway" / "image_ids.txt")
+            .read_text()
+            .split("\n")
+            if line
+        ]
         for i, img_file in tqdm(test_files, desc="Loading test images"):
-            img = cv2.imread(str(test_root / "images" / img_file))#[:,:,::-1]
-            
+            img = cv2.imread(str(test_root / "images" / img_file))  # [:,:,::-1]
+
             if img.size == 0:
                 tqdm.write(f"ERROR: IMG {img_file} not found!")
                 continue
@@ -117,10 +151,25 @@ class RDDDataset(YOLODataset):
 
     @staticmethod
     def create_split(
-        data_dir: List[pathlib.Path], split_file: pathlib.Path, split_ratio: float, pretrain: bool = False
+        data_dir: List[pathlib.Path],
+        split_file: pathlib.Path,
+        split_ratio: float,
+        pretrain: bool = False,
     ):
-        split_dirs = data_dir if pretrain else [d for d in data_dir if d.parent.name == "Norway"]            
-            
+        """
+        Create the 'split file' containing information about which images are
+        part of the train/validation set
+
+        Args:
+            data_dir (List[pathlib.Path]): Directories in which to look for images
+            split_file (pathlib.Path): path to the splitfile
+            split_ratio (float): fraction of the whole dataset, that should be used for training
+            pretrain (bool, optional): Whether the current mode is in pretrain. Defaults to False.
+        """
+        split_dirs = (
+            data_dir if pretrain else [d for d in data_dir if d.parent.name == "Norway"]
+        )
+
         split_files = []
         for dir in split_dirs:
             img_dir = dir / "images"
@@ -133,20 +182,24 @@ class RDDDataset(YOLODataset):
         random.shuffle(all_ids)
         split_idx = int(round((len(all_ids) * split_ratio)))
         train_ids, val_ids = all_ids[:split_idx], all_ids[split_idx:]
-        
+
         exclusive_train_files = []
-        train_dirs = [] if pretrain else [d for d in data_dir if d.parent.name != "Norway"]
+        train_dirs = (
+            [] if pretrain else [d for d in data_dir if d.parent.name != "Norway"]
+        )
         for dir in train_dirs:
             img_dir = dir / "images"
             train_dir_files = [f for f in img_dir.iterdir() if f.is_file()]
             exclusive_train_files.extend(train_dir_files)
-        
-        supp_train_paths = {k: v for k, v in enumerate(exclusive_train_files, start=max(id_map.keys()) + 1)}
+
+        supp_train_paths = {
+            k: v
+            for k, v in enumerate(exclusive_train_files, start=max(id_map.keys()) + 1)
+        }
         path_map.update(supp_train_paths)
         id_map.update({k: v.stem for k, v in supp_train_paths.items()})
         train_ids.extend(list(supp_train_paths.keys()))
 
-        
         json.dump(
             {
                 "split_ratio": split_ratio,
@@ -159,10 +212,20 @@ class RDDDataset(YOLODataset):
         )
 
     def get_img_files(self, img_path):
+        """Get all image paths
+
+        Args:
+            img_path (str): should be one of ["train", "val", "all"]
+
+        Returns:
+            List[pathlib.Path]: list of image paths of the split
+        """
         ids = self.train_ids if img_path == "train" else self.val_ids
         return [self.path_map[id_] for id_ in ids]
 
     def get_labels(self):
+        """Load all labels into memory"""
+
         def get_lable_file(im_file):
             im_file = pathlib.Path(im_file)
             return (
@@ -230,7 +293,7 @@ class RDDDataset(YOLODataset):
                 f"All labels empty in {cache_path}, can not start training without labels. {HELP_URL}"
             )
         for lbl in labels:
-            mask = ~ np.in1d(lbl["cls"], self.filter_classes)
+            mask = ~np.in1d(lbl["cls"], self.filter_classes)
             lbl["bboxes"] = lbl["bboxes"][mask]
             lbl["cls"] = lbl["cls"][mask]
         return labels
@@ -305,7 +368,7 @@ class RDDDataset(YOLODataset):
                     msgs.append(msg)
                 pbar.desc = f"{desc} {nf} images, {nm + ne} backgrounds, {nc} corrupt"
             pbar.close()
-                
+
         if msgs:
             LOGGER.info("\n".join(msgs))
         if nf == 0:
@@ -355,10 +418,22 @@ class RDDDataset(YOLODataset):
             pbar.close()
 
     def build_transforms(self, hyp=None):
+        """Create the transformations for data augmentation
+
+        Args:
+            hyp (optional): Hyperparameters. Defaults to None.
+
+        Returns:
+            Transformation to apply on the current split
+        """
         if self.augment:
             pre_transform = aug.Compose(
                 [
-                    *([CropFragment(fragment_size=960, resize_shape=self.imgsz)] if not self.pretrain else []),
+                    *(
+                        [CropFragment(fragment_size=960, resize_shape=self.imgsz)]
+                        if not self.pretrain
+                        else []
+                    ),
                     aug.Mosaic(
                         self,
                         imgsz=hyp.imgsz,
@@ -394,9 +469,22 @@ class RDDDataset(YOLODataset):
                 ]
             )
         else:
-            transform = aug.Compose([
-                *([CropFragment(fragment_size=960, gravitate_to_labels=True, resize_shape=self.imgsz)] if not self.pretrain else []),
-                aug.LetterBox(scaleFill=True)])
+            transform = aug.Compose(
+                [
+                    *(
+                        [
+                            CropFragment(
+                                fragment_size=960,
+                                gravitate_to_labels=True,
+                                resize_shape=self.imgsz,
+                            )
+                        ]
+                        if not self.pretrain
+                        else []
+                    ),
+                    aug.LetterBox(scaleFill=True),
+                ]
+            )
         transform.append(
             aug.Format(
                 bbox_format="xywh",
@@ -411,6 +499,17 @@ class RDDDataset(YOLODataset):
         return transform
 
     def load_image(self, i):
+        """Load image at index i
+
+        Args:
+            i (int): index to load image from
+
+        Raises:
+            FileNotFoundError: Image is not available
+
+        Returns:
+            _type_: image, original shape, current shape
+        """
         # Loads 1 image from dataset index 'i', returns (im, resized hw)
         im, f, fn = self.ims[i], self.im_files[i], self.npy_files[i]
         if im is None:  # not cached in RAM
@@ -431,7 +530,17 @@ class RDDDataset(YOLODataset):
             return im, (h0, w0), im.shape[:2]  # im, hw_original, hw_resized
         return self.ims[i], self.im_hw0[i], self.im_hw[i]  # im, hw_original, hw_resized
 
-    def get_weights(self):
+    def get_weights(self) -> np.array:
+        """Generate a weight for every sample in the dataset.
+        This weight vector can be used by a WeightedRandomSampler.
+
+        Weights every sample based on the total frequency of it's contained labels.
+        E.g. a sample containing a rare label class gets a higher weight.
+        This should be used for inbalanced datasets
+        
+        Returns:
+            np.array: vector of weights
+        """
         label_counts = np.array(
             [
                 [
@@ -443,7 +552,7 @@ class RDDDataset(YOLODataset):
         )
         label_weights = np.array([0.5, 1, 1, 1, 1])
         label_counts = np.multiply(label_counts, label_weights)
-        
+
         rel_label_count = label_counts / np.sum(label_counts, axis=0)
         rel_label_count = np.nan_to_num(rel_label_count)
         weights = np.max(rel_label_count, axis=1)

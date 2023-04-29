@@ -14,6 +14,13 @@ class_map = {
 }
 
 def main():
+    """
+    Script to:
+    - Load video(s) frame by frame
+    - Create prediction for each frame
+    - Add annotations to each frame
+    - Save frames as videos.
+    """
     train_idc = [13, 15]
     model_files = [
         (
