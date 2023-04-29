@@ -1,7 +1,20 @@
 # Detecting Road Damage
 ## Setup
+### Python Setup
 ```
 pip install -r requirements.txt
+```
+### Filestructure
+Place the RDDDataset within the `data` folder. The resulting Strucutre should look like this
+```
+TDT4265_project
+├── data
+│   ├── rdd2022
+│   │   ├── RDD2022
+│   │   |   ├── Norway
+│   │   |   |    ├── train
+...
+├── yolo
 ```
 ## About the Model
 This Implementation is centered arount the YOLOv8 Model by ultralytics. The architecture is as follows:
