@@ -5,7 +5,6 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from dataset import RDDDataset
 from torch.utils.data import DataLoader, distributed
 from tqdm import tqdm
 from ultralytics.nn.autobackend import AutoBackend
@@ -20,6 +19,8 @@ from ultralytics.yolo.utils.ops import Profile
 from ultralytics.yolo.utils.torch_utils import (de_parallel, select_device,
                                                 smart_inference_mode)
 from ultralytics.yolo.v8.detect.val import DetectionValidator
+
+from dataset import RDDDataset
 
 
 def seed_worker(worker_id):  # noqa
@@ -238,15 +239,29 @@ class CustomValidator(DetectionValidator):
 
     def print_results(self):
         """Prints training/validation set metrics per class."""
-        pf = '%22s' + '%11i' * 2 + '%11.3g' * len(self.metrics.keys)  # print format
-        LOGGER.info(pf % ('all', self.seen, self.nt_per_class.sum(), *self.metrics.mean_results()))
+        pf = "%22s" + "%11i" * 2 + "%11.3g" * len(self.metrics.keys)  # print format
+        LOGGER.info(
+            pf
+            % ("all", self.seen, self.nt_per_class.sum(), *self.metrics.mean_results())
+        )
         if self.nt_per_class.sum() == 0:
             LOGGER.warning(
-                f'WARNING ⚠️ no labels found in {self.args.task} set, can not compute metrics without labels')
+                f"WARNING ⚠️ no labels found in {self.args.task} set, can not compute metrics without labels"
+            )
 
         # Print results per class
         for i, c in enumerate(self.metrics.ap_class_index):
-            LOGGER.info(pf % (self.names[c], self.seen, self.nt_per_class[c], *self.metrics.class_result(i)))
+            LOGGER.info(
+                pf
+                % (
+                    self.names[c],
+                    self.seen,
+                    self.nt_per_class[c],
+                    *self.metrics.class_result(i),
+                )
+            )
 
         if self.args.plots:
-            self.confusion_matrix.plot(save_dir=self.save_dir, names=list(self.names.values()))
+            self.confusion_matrix.plot(
+                save_dir=self.save_dir, names=list(self.names.values())
+            )
